@@ -1,0 +1,14 @@
+[Unit]
+Description=shiftwrap daemon
+
+[Service]
+KillSignal=SIGINT
+# load path to credentials etc.
+Environment=SHIFTWRAP_DIR=/etc/shiftwrap
+ExecStart=/usr/sbin/shiftwrapd
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+[Install]
+WantedBy=multi-user.target

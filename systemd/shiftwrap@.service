@@ -1,0 +1,15 @@
+[Unit]
+Description=shiftwrap templated service wrapper
+
+[Service]
+KillSignal=SIGINT
+Type=oneshot
+RemainAfterExit=true
+## port = 0x7AC0 = 31424
+Environment=SWURL=http://localhost:31424/service/%i/managed
+ExecStartPre=/usr/bin/curl --silent -X POST ${SWURL}/true
+ExecStart=/usr/bin/true
+ExecStopPost=/usr/bin/curl --silent -X POST ${SWURL}/false
+Restart=no
+StandardOutput=journal
+StandardError=journal

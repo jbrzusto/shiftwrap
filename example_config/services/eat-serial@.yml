@@ -1,0 +1,8 @@
+name: EatSerial@
+issytemd: true
+shifts:
+  Morning:
+    start: 10:00
+    stop: solarNoon-1h
+    setup: "echo at `date --date @$SHIFTWRAP_TIME` stty ${SHIFTWRAP_SERVICE/*@/} 115200 raw"
+    takedown: "echo at `date --date @$SHIFTWRAP_TIME` stty ${SHIFTWRAP_SERVICE/*@/} cooked"

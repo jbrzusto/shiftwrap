@@ -1,0 +1,13 @@
+name: MyBogus
+issystemd: true
+shifts:
+  Overnight:
+    setup: "echo at `date --date @$SHIFTWRAP_CLOCK` do something in shell to setup"
+    start: sunset-1h3.2s
+    stop: sunrise+1h10m
+    takedown: "echo shell takedown"
+  Afternoon:
+    setup: "echo at `date --date @$SHIFTWRAP_CLOCK` afternoon setup commands"
+    start: 15:00
+    stop: 15:30
+    takedown: "echo afternoon takedown"

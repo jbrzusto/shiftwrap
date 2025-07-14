@@ -1,0 +1,11 @@
+shell: /usr/bin/bash
+default_min_runtime: 300s
+observer:
+  latitude: 45
+  longitude: -65
+  height: 125
+location: America/Halifax
+server_address: "localhost:9009"
+idle_handler_command: "echo rtcwake -m mem -s $SHIFTWRAP_IDLE_DURATION"
+idle_handler_min_runtime: 5m
+idle_handler_initial_delay: 3m

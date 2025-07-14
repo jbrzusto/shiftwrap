@@ -1,0 +1,13 @@
+name: MyFake
+issystemd: false
+shifts:
+  DuskToDawn:
+    setup: "echo at `date --date @$SHIFTWRAP_TIME` do something in shell to setup d2d"
+    start: dusk-1h
+    stop: dawn+1h
+    takedown: "echo at `date --date @$SHIFTWRAP_TIME` shell takedown d2d"
+  MidDay:
+    setup: "echo at `date --date @$SHIFTWRAP_TIME` mid-day setup commands"
+    start: solarNoon
+    stop: 13:45
+    takedown: "echo at `date --date @$SHIFTWRAP_TIME` mid-day takedown"
