@@ -1,5 +1,8 @@
 # Shiftwrap
 
+**Note:  this is a work in progress.  A statically-configured `/etc/shiftwrap` folder will work,
+but the live API via `shiftwrapd` is still in progress.  Completion target is July 31, 2025.**
+
 `Shiftwrap` wraps `systemd` services to ensure they are running during one or more
 daily shifts.  Shift start and stop times can be fixed times of day, or
 relative to solar events such as sunrise.  Each shift can have start-up
