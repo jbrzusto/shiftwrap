@@ -64,6 +64,9 @@ type ShiftWrap struct {
 	nextShiftChangeIDMtx sync.Mutex
 	// prevHeadID is the id of the previous head of the ShiftChange queue
 	prevHeadID uint64
+	// cachedSolarEvents keeps calculated solar event times for up to a year
+	// It is indexed by (day of year)-1 (0, 1, ..., 365)
+	cachedSolarEvents []SolarEvents
 }
 
 // TidyDuration is a time.Duration which is printed in "AhBmC.Ds" format
@@ -77,7 +80,7 @@ type Service struct {
 	// with an X.yml file in the /etc/shiftwrap directory, but whether it is managed or not
 	// is determined by use of systemctl; e.g. systemctl enable shitwrap@myservice
 	IsManaged bool `yaml:"-"`
-	// IsSystemd is true if Name refers to a systemd service (which must have a .service
+	// IsSystemd is true if Name refers to a systemd service, which must have a .service
 	// file in one of the standard systemd directories.
 	IsSystemd bool
 	// MinRuntime is the minimum time Service should be run; shorter shifts are dropped
@@ -92,7 +95,7 @@ type Service struct {
 	shiftChanges ShiftChanges
 	// shiftChangeIndex tracks which shift we are currently in; -1 means not yet known
 	shiftChangeIndex int
-	// running is cached running status.  This item is definitive if Name == "", because
+	// running is cached running status.  This item is definitive if IsSystemd is false because
 	// then there is no systemd service to start/stop (only Setup and Takedown
 	// scripts are run).
 	// Initially, service running status is checked by calling Service.CheckIfRunning()
@@ -109,7 +112,7 @@ type ServiceEvent int
 
 const (
 	// SchedulerReady is sent when the Scheduler for a Service has been started
-	SchedulerReady = iota
+	SchedulerReady ServiceEvent = iota
 	// SchedulerDone is sent when the Scheduler for a Service has been stopped
 	SchedulerDone
 	// ServiceRemoved is sent when a Service has been removed from the ShiftWrap
@@ -126,15 +129,14 @@ type Shift struct {
 	// service is the service to which this shift definition belongs
 	service *Service
 	// Label uniquely identifies this ShiftDef within Service
-	Label string
+	Label string `yaml:"-" json:"-"`
 	// Start specifes the time, possibly relative to a solar event, at which the shift begins
 	Start *TimeSpec
 	// Stop specifes the time, possibly relative to a solar event, at which the shift ends
 	Stop *TimeSpec
-	// MustInclude specifes a time which must be included in the shift in order to use it.
-	MustInclude *TimeSpec
-	// MustExclude specifes a time which must *not* be included in the shift in order to use it.
-	MustExclude *TimeSpec
+	// StopBeforeStart specifies this is a shift whose Stop time precedes its Start time
+	// when calculated for the same day. It is either nil or a bool true or false
+	StopBeforeStart any
 	// Setup is code to run in a shell before the service is started for this shift
 	Setup string
 	// Takedown is code to run in a shell after the service is stopped for this shift
@@ -150,28 +152,13 @@ type TimeSpec struct {
 	// Origin is the name of a solar event; "" means clock midnight.
 	Origin suncalc.DayTimeName
 	// Offset from Origin.  When Origin=="", this is not used and TimeOfDay is
-	Offset time.Duration
+	Offset TidyDuration
 	// TimeOfDay is the time of day (on the date 1 Jan 0) of the event;
 	// only used if Origin==""
 	TimeOfDay time.Time
 }
 
-// ShiftChangeType is the type of ShiftChangeType
-// Two of these are real (Start, Stop), and the other two
-// are just convenient ways to represent other times associated
-// with a Shift definition.
-type ShiftChangeType uint8
-
-const (
-	Start ShiftChangeType = iota
-	Stop
-	MustInclude
-	MustExclude
-)
-
-// ShiftChange is the start or end of a specific shift (if Type = Start or Stop)
-// or a time which must be included or excluded (if Type = MustInclude or MustExclude).
-// starts or ends on a particular day.
+// ShiftChange is the start or end of a specific shift.
 type ShiftChange struct {
 	// id is a unique id for this shiftchange, through an entire session
 	// of ShiftWrap.  If id == 0, this is a zero ShiftChange
@@ -180,23 +167,14 @@ type ShiftChange struct {
 	shift *Shift
 	// At specifies the time for the shift change
 	At time.Time
-	// Type indicates whether this is the start, end or other timespec
-	Type ShiftChangeType
+	// IsStart indicates whether this is a start or stop
+	IsStart bool
 	// trueAt, if not zero, is the time the shift change actually occurred
 	trueAt time.Time
 }
 
 // ShiftChanges is a slice of ShiftChange
 type ShiftChanges []ShiftChange
-
-// ShiftChangeSinglet is a Start, Stop and optionally MustInclude and MustExclude Shift Changes,
-// calculated for one Shift on one day.  MustInclude and MustExclude can satisfy IsZero()
-type ShiftChangeSinglet struct {
-	Start       ShiftChange
-	Stop        ShiftChange
-	MustInclude ShiftChange
-	MustExclude ShiftChange
-}
 
 // SchedMsgType is a type of message sent to or by the scheduler
 type SchedMsgType int
@@ -222,156 +200,76 @@ func (sh *Shift) Parse(buf []byte) (err error) {
 	return
 }
 
-// ShiftChangesOn returns a ShiftChangeSinglet for Shift sh on date d.
+// ShiftChangesOn returns the Start and Stop ShiftChanges for a shift on a day.
+// The times are calculated from any relevant solar events for that day.
 // The time component of d should be local noon.
-func (sw *ShiftWrap) ShiftChangesOn(sh *Shift, d time.Time) (rv ShiftChangeSinglet) {
-	rv.Start = sw.NewShiftChange(sh, sw.Time(d, sh.Start), Start)
-	rv.Stop = sw.NewShiftChange(sh, sw.Time(d, sh.Stop), Stop)
-	if sh.MustInclude != nil {
-		rv.MustInclude = sw.NewShiftChange(sh, sw.Time(d, sh.MustInclude), MustInclude)
-	}
-	if sh.MustExclude != nil {
-		rv.MustExclude = sw.NewShiftChange(sh, sw.Time(d, sh.MustExclude), MustExclude)
-	}
+func (sw *ShiftWrap) ShiftChangesOn(sh *Shift, d time.Time) (start, stop ShiftChange) {
+	start = sw.NewShiftChange(sh, sw.Time(d, sh.Start), true)
+	stop = sw.NewShiftChange(sh, sw.Time(d, sh.Stop), false)
 	return
 }
 
-// AddSinglet adds some or all of the non-zero ShiftChanges from a ShiftChangeSinglet
-// to scs. Only those which can be part of a shift overlapping the day given by daystart,
-// dayend are added.  Returns true if at least one Start or Stop ShiftChange was added.
-func (scs *ShiftChanges) AddSinglet(sg ShiftChangeSinglet, daystart, dayend time.Time) (rv bool) {
-	//	log.Printf("adding singlet %v to %s\n", sg, daystart.Format(time.DateOnly))
-	if sg.Start.At.Before(sg.Stop.At) {
-		// "same-day" shift
-		if !(daystart.After(sg.Stop.At) || dayend.Before(sg.Start.At)) {
-			// shift overlaps day
-			*scs = append(*scs, sg.Start, sg.Stop)
-			rv = true
+// HasOverlap returns true iff the first time range overlaps
+// the second for a positive (not zero) duration.  Returns false
+// otherwise, or if either range is empty (start >= stop).
+func HasOverlap(start1, stop1, start2, stop2 time.Time) bool {
+	if start1.After(stop1) || start2.After(stop2) {
+		return false
+	}
+	return start1.Before(stop2) && start2.Before(stop1)
+}
+
+// ShiftShiftChanges returns a slice of Start/Stop ShiftChange
+// pairs for Shift sh which overlap the day containing d.  The return
+// value is sorted by increasing time.  The time component of d should
+// be local noon.
+func (sw *ShiftWrap) ShiftShiftChanges(sh *Shift, d time.Time) (rv ShiftChanges) {
+	daystart, dayend := DayStartEnd(d)
+	if sh.StopBeforeStart == nil {
+		sh.GuessStopBeforeStart()
+	}
+	sbs, okay := sh.StopBeforeStart.(bool)
+	if !okay {
+		log.Printf("skipping service %s shift %s because StopBeforeStart field bad value: %v", sh.Service().Name, sh.Label, sh.StopBeforeStart)
+		return
+	}
+	if !sbs {
+		// "Normal" shift - start is before stop
+		// the shifts calculated for yesterday, today, and tomorrow *could* overlap today
+		for _, dd := range []int{-1, 0, 1} {
+			start, stop := sw.ShiftChangesOn(sh, d.AddDate(0, 0, dd))
+			if HasOverlap(daystart, dayend, start.At, stop.At) {
+				rv = append(rv, start, stop)
+			}
 		}
 	} else {
-		// "overnight shift"
-		// add Start if before end of day but after 1 day before
-		if !sg.Start.At.After(dayend) && sg.Start.At.After(daystart.AddDate(0, 0, -1)) {
-			*scs = append(*scs, sg.Start)
-			rv = true
+		// "Inverted" shift - stop is before start.
+		// At most two shifts overlap today:
+		// [Start yesterday ... Stop today]
+		// [Start today ... Stop tomorrow]
+		startToday, stopToday := sw.ShiftChangesOn(sh, d)
+		startYesterday, _ := sw.ShiftChangesOn(sh, d.AddDate(0, 0, -1))
+		_, stopTomorrow := sw.ShiftChangesOn(sh, d.AddDate(0, 0, 1))
+		if HasOverlap(daystart, dayend, startYesterday.At, stopToday.At) {
+			rv = append(rv, startYesterday, stopToday)
 		}
-		// add Stop if after start of day but before 1 day after
-		if !sg.Stop.At.Before(daystart) && sg.Stop.At.Before(dayend.AddDate(0, 0, 1)) {
-			*scs = append(*scs, sg.Stop)
-			rv = true
+		if HasOverlap(daystart, dayend, startToday.At, stopTomorrow.At) {
+			rv = append(rv, startToday, stopTomorrow)
 		}
+
 	}
-	// add any non-zero includes/excludes
-	if !sg.MustInclude.IsZero() {
-		*scs = append(*scs, sg.MustInclude)
-	}
-	if !sg.MustExclude.IsZero() {
-		*scs = append(*scs, sg.MustExclude)
-	}
+	// log.Printf("shiftshiftchanges for %s:\n%v", sh.Label, rv)
 	return
 }
 
-// ShiftChangesAffecting returns a slice of ShiftChanges (include
-// Exclude and Include times) for Shift sh which could affect the day
-// containing d.  Enumeration starts with d and continues with adjacent days
-// in each direction until a day is found which adds no ShiftChanges.
-// The set of all ShiftChanges calculated for the days from the earliest to the latest
-// is returned.
-func (sw *ShiftWrap) ShiftChangesAffecting(sh *Shift, d time.Time) (rv ShiftChanges) {
-	daystart, dayend := DayStartEnd(d)
-	day := sw.ShiftChangesOn(sh, d)
-	rv.AddSinglet(day, daystart, dayend)
-	for dd := 1; dd > -2; dd -= 2 {
-		done := false
-		for i := 1; i < 365 && !done; i++ {
-			day = sw.ShiftChangesOn(sh, d.AddDate(0, 0, i*dd))
-			done = !rv.AddSinglet(day, daystart, dayend)
-		}
-		if !done {
-			dir := "after"
-			if dd < 0 {
-				dir = "before"
-			}
-			log.Printf("weird - at least 365 days %s %s have shifts affcting it, for service %s, shift %s", dir, d.Format(time.DateTime), sh.Service().Name, sh.Label)
-		}
-	}
-	rv.Sort()
-	return
-}
-
-// ShiftRunningPeriods returns a slice of ShiftChanges, defined by Shift
-// sh, which give running periods that overlap day d.  That is,
-// len(rv) is even, rv is sorted in order of ascending .At field, and
-// elements of rv alternate between Type==Start and Type==Stop,
-// beginning with the former.  These periods will satisfy MustInclude
-// and/or MustExclude conditions, if sh specifies these.  Running periods
-// go from a Start ShiftChange to the next Stop ShiftChange.
-// The time component of d should be local noon.
-func (sw *ShiftWrap) ShiftRunningPeriods(sh *Shift, d time.Time) (rv ShiftChanges) {
-	scs := sw.ShiftChangesAffecting(sh, d)
-	//	fmt.Printf("SCA %s:\n%s\n", d.Format(time.DateOnly), scs.String())
-	daystart, dayend := DayStartEnd(d)
-	haveInc := !sh.MustInclude.IsZero()
-	haveExc := !sh.MustExclude.IsZero()
-	// loop, finding a Start
-	foundStart, foundInc, foundExc := false, false, false
-	dest := 0
-	for _, sc := range scs {
-		switch sc.Type {
-		case Start:
-			if !foundStart {
-				scs[dest] = sc
-				dest++
-				foundStart = true
-			} else {
-				// replace start.
-				scs[dest-1] = sc
-				foundInc = false
-				foundExc = false
-			}
-		case MustInclude:
-			if foundStart {
-				foundInc = true
-			}
-		case MustExclude:
-			if foundStart {
-				foundExc = true
-			}
-		case Stop:
-			if foundStart {
-				if ((haveInc && foundInc) || !haveInc) &&
-					((haveExc && !foundExc) || !haveExc) &&
-					scs[dest-1].At.Before(dayend) &&
-					sc.At.After(daystart) {
-					// running period valid, so add this Stop
-					scs[dest] = sc
-					dest++
-				} else {
-					// running period not valid, so drop the start
-					dest--
-				}
-				foundStart, foundInc, foundExc = false, false, false
-			} else {
-				// ignore stray Stop
-			}
-		}
-	}
-	if foundStart {
-		// remove dangling Start
-		dest--
-	}
-	rv = scs[0:dest]
-	return
-}
-
-// ServiceRunningPeriods returns a slice of ShiftChanges from all Shifts
-// for service s; these define running periods which overlap day d.  The
-// running periods from different shifts are merged when they overlap, and
-// then any shorter than MinRuntime are removed.
-// The time component of d should be local noon.
-func (sw *ShiftWrap) ServiceRunningPeriods(s *Service, d time.Time, raw bool) (rv ShiftChanges) {
+// ServiceShiftChanges returns a slice of Start/Stop ShiftChange pairs
+// which overlap day d, from all Shifts for service s.  If raw is
+// false, running periods from different shifts are merged when they
+// overlap, and then any shorter than MinRuntime are removed.  The
+// time component of d should be local noon.
+func (sw *ShiftWrap) ServiceShiftChanges(s *Service, d time.Time, raw bool) (rv ShiftChanges) {
 	for _, sh := range s.Shifts {
-		rv = append(rv, sw.ShiftRunningPeriods(sh, d)...)
+		rv = append(rv, sw.ShiftShiftChanges(sh, d)...)
 	}
 	rv.Sort()
 	if !raw {
@@ -388,6 +286,7 @@ func (s *Service) Parse(buf []byte) (err error) {
 	}
 	for n, sh := range s.Shifts {
 		sh.Label = n
+		sh.service = s
 	}
 	return
 }
@@ -423,7 +322,7 @@ func (ts TimeSpec) MarshalJSON() (value []byte, err error) {
 }
 
 func (sc ShiftChange) MarshalJSON() (value []byte, err error) {
-	value = []byte(fmt.Sprintf(`{"Service":"%s", "Label":"%s","At":"%s","IsStart":%t}`, sc.Service().Name, sc.Shift().Label, sc.At, sc.Type == Start))
+	value = []byte(fmt.Sprintf(`{"Service":"%s", "Label":"%s","At":"%s","IsStart":"%t"}`, sc.Service().Name, sc.Shift().Label, sc.At, sc.IsStart))
 	return
 }
 
@@ -432,26 +331,17 @@ func (sc ShiftChange) IsZero() bool {
 	return sc.id == 0
 }
 
-// String formats ShiftChange as a string
-func (sc *ShiftChange) String() (rv string) {
+// String formats ShiftChange as a string The time is given in
+// "source" format (e.g. "Sunset+1h"), rather than as calculated.  See
+// ShiftChanges.String() for a format that includes the latter.
+func (sc ShiftChange) String() (rv string) {
 	var verb, when string
-	if sc.id == 0 {
-		rv = "Zero  shift"
-		return
-	}
-	switch sc.Type {
-	case Start:
+	if sc.IsStart {
 		verb = "Start"
 		when = sc.Shift().Start.String()
-	case Stop:
+	} else {
 		verb = "Stop "
 		when = sc.Shift().Stop.String()
-	case MustInclude:
-		verb = "Inc  "
-		when = sc.Shift().MustInclude.String()
-	case MustExclude:
-		verb = "Exc "
-		when = sc.Shift().MustExclude.String()
 	}
 	rv = verb + " shift " + sc.Shift().Label + " at " + when
 	return
@@ -480,7 +370,7 @@ func (s *ShiftChange) Service() *Service {
 // Equals returns true if sc and sc2 represent the same effective shift change,
 // i.e. ignoring allocation order (.id) or time of ocurrence (.trueAt)
 func (sc ShiftChange) Equals(sc2 ShiftChange) bool {
-	return sc.shift == sc2.shift && sc.At == sc2.At && sc.Type == sc2.Type
+	return sc.shift == sc2.shift && sc.At == sc2.At && sc.IsStart == sc2.IsStart
 }
 
 var DefaultShiftWrap *ShiftWrap
@@ -503,6 +393,7 @@ func NewShiftWrapWithAClock(c timewarper.AClock) (rv *ShiftWrap) {
 		schedChan:          make(chan SchedMsg),
 		startTime:          time.Now(),
 		nextShiftChangeID:  1, // avoid generating zero-valued ShiftChange
+		cachedSolarEvents:  make([]SolarEvents, 366),
 	}
 	if os.Geteuid() == 0 {
 		rv.systemctlUserOpt = "--system"
@@ -522,14 +413,14 @@ func (sw *ShiftWrap) Quit() {
 
 // NewShiftChange creates a new ShiftChange for the given
 // shift, time, and start flag
-func (sw *ShiftWrap) NewShiftChange(sh *Shift, at time.Time, sct ShiftChangeType) (rv ShiftChange) {
+func (sw *ShiftWrap) NewShiftChange(sh *Shift, at time.Time, isStart bool) (rv ShiftChange) {
 	sw.nextShiftChangeIDMtx.Lock()
 	defer sw.nextShiftChangeIDMtx.Unlock()
 	rv = ShiftChange{
-		shift: sh,
-		At:    at,
-		Type:  sct,
-		id:    sw.nextShiftChangeID,
+		shift:   sh,
+		At:      at,
+		IsStart: isStart,
+		id:      sw.nextShiftChangeID,
 	}
 	sw.nextShiftChangeID++
 	return
@@ -548,10 +439,13 @@ func (sw *ShiftWrap) NewShiftChangeListener() chan ShiftChange {
 // has the zero value for this field, the DefaultMinRunTime from the ShiftWrap's
 // Config field is used
 func (sw *ShiftWrap) MinRuntime(s *Service) time.Duration {
+	var td TidyDuration
 	if s.MinRuntime != 0 {
-		return time.Duration(s.MinRuntime)
+		td = s.MinRuntime
+	} else {
+		td = sw.Conf.DefaultMinRuntime
 	}
-	return sw.Conf.DefaultMinRuntime
+	return time.Duration(td)
 }
 
 var activeStatus = map[string]bool{
@@ -564,12 +458,13 @@ var activeStatus = map[string]bool{
 	"auto-restart": true,
 }
 
-// CheckIfRunning returns true if Name != "" and Service is running or in
-// the process of starting up, according to systemd.  If Name == "", returns
-// the isrunning flag, which indicates that the Setup script has run successfully
-// more recently than the Takedown script has.
+// CheckIfRunning returns true if IsSystemd is true and the systemd
+// service named s.Name is running or in the process of starting up.
+// If IsSystemd is false, returns the isrunning flag, which indicates
+// that the Setup script has run successfully more recently than the
+// Takedown script has.
 func (s *Service) CheckIfRunning() bool {
-	if s.Name == "" {
+	if !s.IsSystemd {
 		// there's no real service; only Setup and Takedown scripts are run
 		return s.running
 	}
@@ -849,7 +744,7 @@ func (sw *ShiftWrap) CalculateShiftChanges(s *Service, t time.Time) (rv time.Tim
 	if t.IsZero() {
 		t = sw.Clock.Now()
 	}
-	s.shiftChanges = sw.ServiceRunningPeriods(s, t, false)
+	s.shiftChanges = sw.ServiceShiftChanges(s, t, false)
 	s.shiftChangeIndex = -1
 	// log.Printf("shiftchanges for %s at %s: %v", s.Name, t.Format(time.DateTime), s.shiftChanges)
 	return
@@ -950,7 +845,7 @@ func (sw *ShiftWrap) MergeOverlaps(scs ShiftChanges) (rv ShiftChanges) {
 	// - if a shift starts but there are already other started shifts which haven't stopped, drop the start
 	// - if a started shift stops but there are still other started shifts which haven't, drop the stop
 	for _, sc := range scs {
-		if sc.Type == Start {
+		if sc.IsStart {
 			if shiftsStarted == 0 {
 				// keep this start
 				rv = append(rv, sc)
@@ -978,7 +873,7 @@ func (sw *ShiftWrap) RemoveShorts(scs ShiftChanges) (rv ShiftChanges) {
 		// length, then drop the shift by removing the start
 		// ShiftChange and don't add this stop ShiftChange
 		// (we should always have the start ShiftChange if scs was created by ServiceRunningPeriods)
-		if sc.Type == Stop && len(rv) > 0 && rv[len(rv)-1].Type == Start && sc.At.Sub(rv[len(rv)-1].At) < m {
+		if (!sc.IsStart) && len(rv) > 0 && rv[len(rv)-1].IsStart && sc.At.Sub(rv[len(rv)-1].At) < m {
 			rv = rv[0 : len(rv)-1]
 		} else {
 			rv = append(rv, sc)
@@ -987,32 +882,88 @@ func (sw *ShiftWrap) RemoveShorts(scs ShiftChanges) (rv ShiftChanges) {
 	return
 }
 
-// cachedSolarEvents keeps calculated solar event times for a sliding month window
-// It is indexed by day of month.
-var cachedSolarEvents = make([]SolarEvents, 31)
-
 // GetSolarEvents returns the SolarEvents for a given date
 func (sw *ShiftWrap) GetSolarEvents(t time.Time) (rv SolarEvents) {
-	d := t.Day() - 1
-	if rv = cachedSolarEvents[d]; rv == nil {
-		cachedSolarEvents[d] = suncalc.GetTimesWithObserver(t, sw.Conf.Observer)
-		rv = cachedSolarEvents[d]
+	d := t.YearDay() - 1
+	// if no cache entry or it's for the wrong year, recalculate
+	if rv = sw.cachedSolarEvents[d]; rv == nil || rv["SolarNoon"].Value.Year() != t.Year() {
+		sw.cachedSolarEvents[d] = suncalc.GetTimesWithObserver(t, sw.Conf.Observer)
+		rv = sw.cachedSolarEvents[d]
 	}
 	return
+}
+
+// ClearSolarEventsCache clears the solar event cache
+func (sw *ShiftWrap) ClearSolarEventsCache() {
+	clear(sw.cachedSolarEvents)
+}
+
+// CopyTimeOnly copies the non-date portions of a time.Time to another time.Time
+func CopyTimeOnly(dst, src time.Time) time.Time {
+	return time.Date(dst.Year(), dst.Month(), dst.Day(), src.Hour(), src.Minute(), src.Second(), src.Nanosecond(), dst.Location())
 }
 
 // Time converts a TimeSpec to a time for the day given in t
 func (sw *ShiftWrap) Time(t time.Time, ts *TimeSpec) (rv time.Time) {
 	if ts.Origin == "" {
-		rv = time.Date(t.Year(), t.Month(), t.Day(), ts.TimeOfDay.Hour(), ts.TimeOfDay.Minute(), ts.TimeOfDay.Second(), ts.TimeOfDay.Nanosecond(), time.Local)
+		rv = CopyTimeOnly(t, ts.TimeOfDay)
 	} else {
 		se := sw.GetSolarEvents(t)
 		if dt, okay := se[ts.Origin]; okay {
-			rv = dt.Value.Add(ts.Offset)
+			rv = dt.Value.Add(time.Duration(ts.Offset))
 		} else {
 			log.Fatalf("unknown solar event: %s", ts.Origin)
 		}
 	}
+	return
+}
+
+// referenceSolarEvents is the SolarEvents for the day 20 Mar 2025 (March equinox)
+// at the location 0 deg W, 0 deg N, 0 m ASL.
+var referenceSolarEvents SolarEvents
+
+// referneceDate is the time 20 Mar 2025, at noon UTC
+var referenceDate time.Time = time.Date(2025, 3, 20, 12, 0, 0, 0, time.UTC)
+
+// referenceObserver is at Lat=0, Long=0, Altitude=0
+var referenceObserver suncalc.Observer = suncalc.Observer{Location: time.Local}
+
+func init() {
+	referenceSolarEvents = suncalc.GetTimesWithObserver(referenceDate, referenceObserver)
+}
+
+// ReferenceTime converts a TimeSpec to a time for the day 20 Mar 2025 (March equinox)
+// at the location 0 deg W, 0 deg N, 0 m ASL.  This is used in guessing
+// whether a Shift is intended to be StopBeforeStart or not.  It returns an error
+// if ts refers to an unknown solar event.
+func (ts *TimeSpec) ReferenceTime() (rv time.Time, err error) {
+	if ts.Origin == "" {
+		rv = CopyTimeOnly(referenceDate, ts.TimeOfDay)
+	} else {
+		if dt, okay := referenceSolarEvents[ts.Origin]; okay {
+			rv = dt.Value.Add(time.Duration(ts.Offset))
+		} else {
+			err = fmt.Errorf("unknown solar event: %s", ts.Origin)
+		}
+	}
+	return
+}
+
+// GuessStopBeforeStart guesses whether a shift definition is of
+// type StopBeforeStart by calculating Start and Stop with ReferenceTime()
+// and comparing them.
+func (s *Shift) GuessStopBeforeStart() {
+	var (
+		start, stop time.Time
+		err         error
+	)
+	if start, err = s.Start.ReferenceTime(); err != nil {
+		return
+	}
+	if stop, err = s.Stop.ReferenceTime(); err != nil {
+		return
+	}
+	s.StopBeforeStart = stop.Before(start)
 	return
 }
 
@@ -1046,9 +997,6 @@ func (sw *ShiftWrap) ReadConfig(confDir string) {
 				s := &Service{}
 				if err = s.Parse(buf); err == nil {
 					sw.AddService(s)
-					for _, sh := range s.Shifts {
-						sh.service = s
-					}
 					if !strings.Contains(s.Name, "@") {
 						s.IsRunning()
 					}
@@ -1059,6 +1007,19 @@ func (sw *ShiftWrap) ReadConfig(confDir string) {
 			log.Printf("error parsing config file %s: %s", p, err.Error())
 		}
 	}
+}
+
+// WriteConfig (re-)writes the yaml file for a Service's configuration
+// to the given folder.  The filename will be s.Name lower-cased, with ".yml"
+// appended.
+func (sw *ShiftWrap) WriteConfig(s *Service, confDir string) (err error) {
+	p := path.Join(confDir, strings.ToLower(s.Name)+".yml")
+	b, err := yaml.Marshal(s)
+	if err != nil {
+		return
+	}
+	err = os.WriteFile(p, b, 0644)
+	return
 }
 
 // solarEventNames holds the lower-case names of all solar events in a
@@ -1147,7 +1108,7 @@ func ParseTimeSpec(s string) (rv TimeSpec, err error) {
 			err = fmt.Errorf("unable to parse time offset %s: %s", offset, err.Error())
 			return
 		}
-		rv.Offset = d
+		rv.Offset = TidyDuration(d)
 	}
 	return
 }
@@ -1209,6 +1170,38 @@ func (td TidyDuration) String() (rv string) {
 // MarshalJSON formats a TidyDuration for JSON
 func (td TidyDuration) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + td.String() + `"`), nil
+}
+
+// MarshalYAML formats a TidyDuration for YAML
+func (td TidyDuration) MarshalYAML() (value any, err error) {
+	value = td.String()
+	return
+}
+
+// UnMarshalJSON parses a TidyDuration from JSON
+func (td *TidyDuration) UnmarshalJSON(value []byte) (err error) {
+	var d time.Duration
+	if len(value) < 2 || value[0] != '"' || value[len(value)-1] != '"' {
+		err = fmt.Errorf("error: time duration value must be a string; e.g. \"5m\"")
+		return
+	}
+	d, err = time.ParseDuration(string(value[1 : len(value)-1]))
+	if err != nil {
+		return
+	}
+	*td = TidyDuration(d)
+	return
+}
+
+// UnMarshalJSON parses a TidyDuration yaml
+func (td *TidyDuration) UnmarshalYAML(value *yaml.Node) (err error) {
+	var d time.Duration
+	d, err = time.ParseDuration(value.Value)
+	if err != nil {
+		return
+	}
+	*td = TidyDuration(d)
+	return
 }
 
 // String formats a TidyDuration using DurationCompactString
@@ -1282,7 +1275,7 @@ func (sw *ShiftWrap) doIdle(next time.Time) {
 	realNow := time.Now()
 	left := next.Sub(now)
 	// log.Printf("%s: got to idle with left=%d until=%s", now.Format(time.DateTime), left/1e9, next.Format(time.DateTime))
-	if sw.Conf.IdleHandlerCommand != "" && realNow.Sub(sw.startTime) >= sw.Conf.IdleHandlerInitialDelay && sw.Clock.RealDuration(left) >= sw.Conf.IdleHandlerMinRuntime {
+	if sw.Conf.IdleHandlerCommand != "" && realNow.Sub(sw.startTime) >= time.Duration(sw.Conf.IdleHandlerInitialDelay) && sw.Clock.RealDuration(left) >= time.Duration(sw.Conf.IdleHandlerMinRuntime) {
 		cmd := exec.Command(sw.Conf.Shell, "-c", sw.Conf.IdleHandlerCommand)
 		cmd.Env = append(cmd.Environ(),
 			fmt.Sprintf("SHIFTWRAP_IDLE_DURATION=%d", sw.Clock.RealDuration(left)/1e9),
@@ -1350,7 +1343,7 @@ func (sw *ShiftWrap) doShiftChange(now time.Time) {
 		return
 	}
 	s := sc.Service()
-	if sc.Type == Start {
+	if sc.IsStart {
 		// log.Printf("starting shift %s at %v", sc.Shift().Label, sw.Clock.Now())
 		sw.Start(s, sc.shift, now)
 	} else {
@@ -1427,7 +1420,7 @@ func (sw *ShiftWrap) doManageService(s *Service) {
 	// its IsStart value will be the opposite of what the current running
 	// state *should* be.
 	sc := s.shiftChanges[s.shiftChangeIndex]
-	waitingForStart := sc.Type == Start
+	waitingForStart := sc.IsStart
 	// if s is not waiting for a Start, then s is waiting for a Stop,
 	// and so should be running.
 	if !waitingForStart && !s.running {
@@ -1452,10 +1445,10 @@ func (sw *ShiftWrap) doManageService(s *Service) {
 		} else {
 			// no shift that overlaps today would have started Service,
 			// so look at yesterday's shiftChanges
-			scs := sw.ServiceRunningPeriods(s, now.Add(-24*time.Hour), false)
+			scs := sw.ServiceShiftChanges(s, now.AddDate(0, 0, -1), false)
 			// find the last Start shiftChange yesterday
 			for i := len(scs) - 1; i >= 0; i-- {
-				if scs[i].Type == Start {
+				if scs[i].IsStart {
 					sh = scs[i].shift
 					break
 				}

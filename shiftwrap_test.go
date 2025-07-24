@@ -28,7 +28,7 @@ func init() {
 	SW = NewShiftWrap()
 	SW.Conf.Observer = Obs
 	T1 = time.Date(2025, 04, 24, 12, 0, 0, 0, time.Local)
-	TestService = &Service{Name: "bogus", IsSystemd: false, MinRuntime: 5 * time.Minute}
+	TestService = &Service{Name: "bogus", IsSystemd: false, MinRuntime: TidyDuration(5 * time.Minute)}
 	TestShifts = NamedShifts{
 		"overnight": &Shift{
 			service:  TestService,
@@ -90,7 +90,7 @@ func init() {
 	for _, tsh := range TestShifts {
 		TestShiftNamed[tsh.Label] = tsh
 	}
-	TestService2 = &Service{Name: "fake-o", IsSystemd: false, MinRuntime: 30 * time.Minute}
+	TestService2 = &Service{Name: "fake-o", IsSystemd: false, MinRuntime: TidyDuration(30 * time.Minute)}
 	TestShifts2 = NamedShifts{
 		"overnight2": &Shift{
 			service:  TestService2,
@@ -112,7 +112,7 @@ func init() {
 	for _, tsh := range TestShifts2 {
 		TestShiftNamed[tsh.Label] = tsh
 	}
-	TestService3 = &Service{Name: "whammo", IsSystemd: false, MinRuntime: 1 * time.Minute}
+	TestService3 = &Service{Name: "whammo", IsSystemd: false, MinRuntime: TidyDuration(1 * time.Minute)}
 	TestShifts3 = NamedShifts{
 		"morning": &Shift{
 			service:  TestService3,
@@ -124,13 +124,13 @@ func init() {
 	}
 	TestShifts4 = NamedShifts{
 		"morning_wonky": &Shift{
-			service:     TestService3,
-			Label:       "morning",
-			Start:       MustParseTimeSpec("dawn+4.5h"),
-			Stop:        MustParseTimeSpec("solarNoon-3h"),
-			MustExclude: MustParseTimeSpec("00:00"),
-			Setup:       "echo setting up for morning wonky whammo",
-			Takedown:    "echo taking down wonky whammo",
+			service:         TestService3,
+			Label:           "morning",
+			Start:           MustParseTimeSpec("dawn+4.5h"),
+			Stop:            MustParseTimeSpec("solarNoon-3h"),
+			StopBeforeStart: false,
+			Setup:           "echo setting up for morning wonky whammo",
+			Takedown:        "echo taking down wonky whammo",
 		},
 	}
 	for _, tsh := range TestShifts3 {
@@ -144,7 +144,7 @@ func init() {
 
 func TestParseTimeSpecValidSolar(t *testing.T) {
 	s := "nauticalDawn -1h20m"
-	want := TimeSpec{Origin: suncalc.NauticalDawn, Offset: time.Duration(-80 * time.Minute)}
+	want := TimeSpec{Origin: suncalc.NauticalDawn, Offset: TidyDuration(time.Duration(-80 * time.Minute))}
 	ts, err := ParseTimeSpec(s)
 	if err != nil || ts != want {
 		t.Errorf(`ParseTimeSpec("%s") = %q, %v, want %#q, nil`, s, ts, err, want)
@@ -172,7 +172,7 @@ func TestParseTimeSpecBad(t *testing.T) {
 func TestTimeFromTimeSpec(t *testing.T) {
 	SW = NewShiftWrap()
 	SW.Conf.Observer = Obs
-	ts := TimeSpec{Origin: "sunrise", Offset: -2*time.Hour - 5*time.Minute}
+	ts := TimeSpec{Origin: "sunrise", Offset: TidyDuration(-2*time.Hour - 5*time.Minute)}
 	// results from the R suncalc package
 	want := time.Date(2025, 04, 24, 06, 21, 02, 0, time.Local).Add(-2*time.Hour - 5*time.Minute).Truncate(time.Second)
 	nt := SW.Time(T1, &ts).Truncate(time.Second)
@@ -266,58 +266,58 @@ func TestServiceStartStop(t *testing.T) {
 	}
 }
 
-func TestServiceRunningPeriods(t *testing.T) {
+func TestServiceShiftChanges(t *testing.T) {
 	SW = NewShiftWrap()
 	SW.Conf.Observer = Obs
 	TestService.Shifts = TestShifts
-	// scr := SW.ServiceRunningPeriods(TestService, T1, true)
-	//	fmt.Printf("Raw:\n%s\n", scr.String())
-	sc := SW.ServiceRunningPeriods(TestService, T1, false)
-	//	fmt.Printf("Cooked:\n%s\n", sc.String())
+	// scr := SW.ServiceShiftChanges(TestService, T1, true)
+	// fmt.Printf("Raw:\n%s\n", scr.String())
+	sc := SW.ServiceShiftChanges(TestService, T1, false)
+	// fmt.Printf("Cooked:\n%s\n", sc.String())
 	want := []ShiftChange{
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 23, 20, 26, 9, 499362560, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 23, 20, 26, 9, 499362560, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 24, 6, 6, 2, 686210816, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 24, 6, 6, 2, 686210816, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["mid-day"],
-			At:    time.Date(2025, time.April, 24, 12, 19, 14, 52065536, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["mid-day"],
+			At:      time.Date(2025, time.April, 24, 12, 19, 14, 52065536, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["afternoon"],
-			At:    time.Date(2025, time.April, 24, 16, 30, 0, 0, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["afternoon"],
+			At:      time.Date(2025, time.April, 24, 16, 30, 0, 0, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 24, 20, 27, 25, 617919744, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 24, 20, 27, 25, 617919744, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 25, 6, 4, 27, 67336960, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 25, 6, 4, 27, 67336960, time.Local),
+			IsStart: false,
 		},
 	}
 	if len(sc) != len(want) {
-		t.Errorf(`TestServiceRunningPeriods returned %d shift changes but want %d`, len(sc), len(want))
+		t.Errorf(`TestServiceShiftChanges returned %d shift changes but want %d`, len(sc), len(want))
 	}
 	for i, v := range want {
 		if !sc[i].Equals(v) {
-			t.Errorf(`TestServiceRunningPeriods returned item[%d] = %#v, want %#v`, i, sc[i], v)
+			t.Errorf(`TestServiceShiftChanges returned item[%d] = %#v, want %#v`, i, sc[i], v)
 		}
 	}
 	SW.Quit()
 }
 
-func TestServiceRunningPeriods_wonky(t *testing.T) {
+func TestServiceShiftChanges_wonky(t *testing.T) {
 	// test running periods where it is important to have a MustExclude item.
 	SW = NewShiftWrap()
 	SW.Conf.Observer = Obs
@@ -325,125 +325,125 @@ func TestServiceRunningPeriods_wonky(t *testing.T) {
 	SW.AddService(TestService3)
 	// On date T1, the Stop time is before the Start time, but this is not meant to
 	// be an overnight shift, so midnight is excluded, and the running period is eliminated.
-	sc := SW.ServiceRunningPeriods(TestService3, T1, false)
+	sc := SW.ServiceShiftChanges(TestService3, T1, false)
 	want := []ShiftChange{}
 	if len(sc) != len(want) {
-		t.Errorf(`TestServiceRunningPeriods_wonky returned %d shift changes but want %d`, len(sc), len(want))
+		t.Errorf(`TestServiceShiftChanges_wonky returned %d shift changes but want %d`, len(sc), len(want))
 	}
 	// On date T1 + 1, Start is shortly before Stop, so there is a running period
 	SW.DropService("whammo")
 	TestService3.Shifts = TestShifts4
 	SW.AddService(TestService3)
-	sc = SW.ServiceRunningPeriods(TestService3, T1.AddDate(0, 0, 1), false)
+	sc = SW.ServiceShiftChanges(TestService3, T1.AddDate(0, 0, 1), false)
 	want = []ShiftChange{
 		ShiftChange{
-			shift: TestShiftNamed["morning"],
-			At:    time.Date(2025, time.April, 25, 10, 17, 45, 315431424, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["morning"],
+			At:      time.Date(2025, time.April, 25, 10, 17, 45, 315431424, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["morning"],
-			At:    time.Date(2025, time.April, 25, 10, 19, 4, 283621120, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["morning"],
+			At:      time.Date(2025, time.April, 25, 10, 19, 4, 283621120, time.Local),
+			IsStart: false,
 		},
 	}
 	if len(sc) != len(want) {
-		t.Errorf(`TestServiceRunningPeriods_wonky returned %d shift changes but want %d`, len(sc), len(want))
+		t.Errorf(`TestServiceShiftChanges_wonky returned %d shift changes but want %d`, len(sc), len(want))
 	}
 	for i := 0; i < min(len(sc), len(want)); i++ {
 		if !want[i].Equals(sc[i]) {
-			t.Errorf(`TestServiceRunningPeriods_wonky returned item[%d] = %#v, want %#v`, i, sc[i], want[i])
+			t.Errorf(`TestServiceShiftChanges_wonky returned item[%d] = %#v, want %#v`, i, sc[i], want[i])
 		}
 	}
 	SW.Quit()
 }
 
-func TestServiceRunningPeriods_raw(t *testing.T) {
+func TestServiceShiftChanges_raw(t *testing.T) {
 	TestService.Shifts = TestShifts
 	SW = NewShiftWrap()
 	SW.Conf.Observer = Obs
-	sc := SW.ServiceRunningPeriods(TestService, T1, true)
+	sc := SW.ServiceShiftChanges(TestService, T1, true)
 	fmt.Printf("%v\n", sc)
 	want := []ShiftChange{
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 23, 20, 26, 9, 499362560, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 23, 20, 26, 9, 499362560, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["aftertoday"],
-			At:    time.Date(2025, time.April, 24, 3, 19, 24, 338511104, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["aftertoday"],
+			At:      time.Date(2025, time.April, 24, 3, 19, 24, 338511104, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["aftertoday"],
-			At:    time.Date(2025, time.April, 24, 5, 19, 24, 338511104, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["aftertoday"],
+			At:      time.Date(2025, time.April, 24, 5, 19, 24, 338511104, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 24, 6, 6, 2, 686210816, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 24, 6, 6, 2, 686210816, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["mid-day"],
-			At:    time.Date(2025, time.April, 24, 12, 19, 14, 52065536, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["mid-day"],
+			At:      time.Date(2025, time.April, 24, 12, 19, 14, 52065536, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["afternoon"],
-			At:    time.Date(2025, time.April, 24, 15, 0, 0, 0, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["afternoon"],
+			At:      time.Date(2025, time.April, 24, 15, 0, 0, 0, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["mid-day"],
-			At:    time.Date(2025, time.April, 24, 16, 19, 14, 52065536, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["mid-day"],
+			At:      time.Date(2025, time.April, 24, 16, 19, 14, 52065536, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["afternoon"],
-			At:    time.Date(2025, time.April, 24, 16, 30, 0, 0, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["afternoon"],
+			At:      time.Date(2025, time.April, 24, 16, 30, 0, 0, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["mini1"],
-			At:    time.Date(2025, time.April, 24, 17, 2, 0, 0, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["mini1"],
+			At:      time.Date(2025, time.April, 24, 17, 2, 0, 0, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["mini2"],
-			At:    time.Date(2025, time.April, 24, 17, 2, 30, 0, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["mini2"],
+			At:      time.Date(2025, time.April, 24, 17, 2, 30, 0, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["mini1"],
-			At:    time.Date(2025, time.April, 24, 17, 3, 0, 0, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["mini1"],
+			At:      time.Date(2025, time.April, 24, 17, 3, 0, 0, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["mini2"],
-			At:    time.Date(2025, time.April, 24, 17, 3, 30, 0, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["mini2"],
+			At:      time.Date(2025, time.April, 24, 17, 3, 30, 0, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 24, 20, 27, 25, 617919744, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 24, 20, 27, 25, 617919744, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["beforetoday"],
-			At:    time.Date(2025, time.April, 24, 21, 19, 04, 283621120, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["beforetoday"],
+			At:      time.Date(2025, time.April, 24, 21, 19, 04, 283621120, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["beforetoday"],
-			At:    time.Date(2025, time.April, 24, 23, 19, 04, 283621120, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["beforetoday"],
+			At:      time.Date(2025, time.April, 24, 23, 19, 04, 283621120, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 25, 6, 4, 27, 67336960, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 25, 6, 4, 27, 67336960, time.Local),
+			IsStart: false,
 		},
 	}
 	if len(sc) != len(want) {
@@ -461,48 +461,48 @@ func TestMergeOverlaps(t *testing.T) {
 	SW = NewShiftWrap()
 	SW.Conf.Observer = Obs
 	TestService.Shifts = TestShifts
-	sc := SW.ServiceRunningPeriods(TestService, T1, true)
+	sc := SW.ServiceShiftChanges(TestService, T1, true)
 	sc = SW.MergeOverlaps(sc)
 	want := []ShiftChange{
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 23, 20, 26, 9, 499362560, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 23, 20, 26, 9, 499362560, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 24, 6, 6, 2, 686210816, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 24, 6, 6, 2, 686210816, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["mid-day"],
-			At:    time.Date(2025, time.April, 24, 12, 19, 14, 52065536, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["mid-day"],
+			At:      time.Date(2025, time.April, 24, 12, 19, 14, 52065536, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["afternoon"],
-			At:    time.Date(2025, time.April, 24, 16, 30, 0, 0, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["afternoon"],
+			At:      time.Date(2025, time.April, 24, 16, 30, 0, 0, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["mini1"],
-			At:    time.Date(2025, time.April, 24, 17, 2, 0, 0, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["mini1"],
+			At:      time.Date(2025, time.April, 24, 17, 2, 0, 0, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["mini2"],
-			At:    time.Date(2025, time.April, 24, 17, 3, 30, 0, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["mini2"],
+			At:      time.Date(2025, time.April, 24, 17, 3, 30, 0, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 24, 20, 27, 25, 617919744, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 24, 20, 27, 25, 617919744, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 25, 6, 4, 27, 67336960, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 25, 6, 4, 27, 67336960, time.Local),
+			IsStart: false,
 		},
 	}
 	if len(sc) != len(want) {
@@ -520,37 +520,37 @@ func TestGetCookedShiftChanges(t *testing.T) {
 	SW = NewShiftWrap()
 	SW.Conf.Observer = Obs
 	TestService.Shifts = TestShifts
-	sc := SW.ServiceRunningPeriods(TestService, T1, false)
+	sc := SW.ServiceShiftChanges(TestService, T1, false)
 	want := []ShiftChange{
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 23, 20, 26, 9, 499362560, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 23, 20, 26, 9, 499362560, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 24, 6, 6, 2, 686210816, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 24, 6, 6, 2, 686210816, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["mid-day"],
-			At:    time.Date(2025, time.April, 24, 12, 19, 14, 52065536, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["mid-day"],
+			At:      time.Date(2025, time.April, 24, 12, 19, 14, 52065536, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["afternoon"],
-			At:    time.Date(2025, time.April, 24, 16, 30, 0, 0, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["afternoon"],
+			At:      time.Date(2025, time.April, 24, 16, 30, 0, 0, time.Local),
+			IsStart: false,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 24, 20, 27, 25, 617919744, time.Local),
-			Type:  Start,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 24, 20, 27, 25, 617919744, time.Local),
+			IsStart: true,
 		},
 		ShiftChange{
-			shift: TestShiftNamed["overnight"],
-			At:    time.Date(2025, time.April, 25, 6, 4, 27, 67336960, time.Local),
-			Type:  Stop,
+			shift:   TestShiftNamed["overnight"],
+			At:      time.Date(2025, time.April, 25, 6, 4, 27, 67336960, time.Local),
+			IsStart: false,
 		},
 	}
 	if len(sc) != len(want) {

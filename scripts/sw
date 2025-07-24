@@ -1,0 +1,180 @@
+#!/bin/bash
+
+# sw - provide some shortcut commands to control shiftwrapd by calls to its HTTP server
+#
+# This script doesn't cover the entire API, just some of the most common uses.
+
+## server config
+SERVER=http://localhost:$((0x7ac0))
+FETCH="/usr/bin/curl --silent"
+
+## pretty-printer for responses from shiftwrapd HTTP server
+## use jq if available, otherwise, cat
+PP=`which jq`
+if [[ "$PP" == "" ]]; then
+    PP=cat
+fi
+
+# put sends JSON payload in $2 to path in $1
+function put () {
+    ${FETCH} -X PUT -H "Content-type: application/json" --data "$2" $SERVER/$1
+}
+
+# get fetches from path in $1
+function get () {
+    ${FETCH} $SERVER/$1
+}
+
+# show global configuration
+function config () {
+    get config | $PP
+}
+
+# show time on shiftwrapd clock
+function get_time () {
+    get time | $PP
+}
+
+# enable shiftwrap management of service $1
+function manage_service () {
+    put service/$1 '{"IsManaged":true}' | $PP
+    # make this persistent across reboots
+    systemctl enable shiftwrap@$1
+}
+
+# disable shiftwrap management of service $1
+function unmanage_service () {
+    put service/$1 '{"IsManaged":false}' | $PP
+    # make this persistent across reboots
+    systemctl disable shiftwrap@$1
+}
+
+# list configured services
+function list_services () {
+    get services | $PP
+}
+
+# show details of service $1
+function show_service () {
+    get service/$1 | $PP
+}
+
+# setup an existing systemd service ($1) to run with a single shift
+# with start time $2 and stop time $3, and enable its management
+# by shiftwrap
+function run_service () {
+    if ! systemctl list-unit-files ${1}.service >/dev/null; then
+	echo unknown systemd service $1
+	exit 1
+    fi
+    echo doing put service/$1 '{"IsManaged":true,"IsSystemd":true,"Name":"'$1'","Shifts":{"Shift_1":{"Start":"'$2'","Stop":"'$3'"}}}'
+    if put service/$1 '{"IsManaged":true,"IsSystemd":true,"Name":"'$1'","Shifts":{"Shift_1":{"Start":"'$2'","Stop":"'$3'"}}}' | $PP; then
+	sudo systemctl enable shiftwrap@$1
+    fi
+}
+
+# show shift changes for a service
+# form 1:                      # no arguments; currently-scheduled shift changes for all services
+# form 2:  foo                 # currently-scheduled shift changes for service foo
+# form 3:  foo 2025-06-05      # shift changes for service foo on date 2025-06-05
+# form 4:  foo 2025-06-05 raw  # shift changes before merging overlaps and removing short shifts
+function shift_changes () {
+    if [[ "$1" == "" ]]; then
+	get queue | $PP
+    elif [[ "$2" == "" ]]; then
+	get service/$1/shiftchanges | $PP
+    elif [[ "$3" == "" ]]; then
+	get service/$1/shiftchanges/$2 | $PP
+    else
+	get service/$1/shiftchanges/$2/raw | $PP
+    fi
+}
+
+function usage () {
+    # The text below is copied from README.md, with backticks and double-asterisks removed
+    cat <<EOF
+sw - control the shiftwrap daemon
+
+Usage:
+
+   sw ACTION ARGS...
+
+where ACTION ARGS... is one of the following phrases:
+
+config
+
+   - prints the global shiftwrap configuration
+
+time
+
+   - prints the current time according to the shiftwrapd clock,
+     which can be a dilated clock (used for testing)
+
+manage SERVICE
+
+   - ensures shiftwrapd is managing the service named SERVICE; this
+     will start SERVICE if the current time is within a shift with at
+     least min_runtime remaining.  Normally, this command is invoked
+     indirectly, by a user doing systemctl enable shiftwrap@SERVICE
+
+unmanage SERVICE
+
+   - ensures shiftwrapd is *not* managing the service named SERVICE;
+     this will *not* stop the service. Normally, this command is invoked
+     indirectly, by a user doing systemctl disable shiftwrap@SERVICE
+
+run SERVICE START STOP
+
+   - ensures shiftwrapd is managing the service named SERVICE, which must
+     be an existing systemd service.  A single shift will be created that
+     starts at START and stops at STOP.  START and STOP can each be either
+     a fixed time of day (e.g. 12:00) or a solar event name followed by
+     an offset (e.g. Sunrise-1h, Sunset+15m).  A shiftwrap config file for
+     the service will be written to the config folder, typically /etc/shiftwrap/services
+     This is a quick-and-dirty command meant to simplify a common use-case.
+
+services
+
+   - lists names of services configured for shiftwrap, whether or not
+     currently managed
+
+service SERVICE
+
+   - shows details of service named SERVICE
+
+shiftchanges
+
+   - shows currently-scheduled shift-changes for next day or so on all services
+
+shiftchanges SERVICE
+
+   - shows currently-scheduled shift-changes for next day or so for service named SERVICE
+
+shiftchanges SERVICE YYYY-MM-DD
+
+   - shows shift-changes that would be scheduled on date YYYY-MM-DD for service named SERVICE
+
+shiftchanges SERVICE YYYY-MM-DD RAW
+
+   - shows *all* shift-changes that would be scheduled on date YYYY-MM-DD for service named SERVICE,
+     before merging overlapping shifts and without removing shifts shorter than min_runtime
+EOF
+
+}
+## switch by 1st arg
+
+ACTION=$1
+shift
+
+case $ACTION in
+    config ) config ;;
+    "time" ) get_time ;;
+    manage ) manage_service $1 ;;
+    unmanage ) unmanage_service $1 ;;
+    services ) list_services ;;
+    service ) show_service $1 ;;
+    shiftchanges ) shift_changes $1 $2 $3 ;;
+    run ) run_service $1 $2 $3 ;;
+    * ) usage && exit -1
+esac
+exit 0

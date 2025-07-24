@@ -1,15 +1,17 @@
 [Unit]
 Description=shiftwrap templated service wrapper
+After=shiftwrapd.service
 
 [Service]
 KillSignal=SIGINT
 Type=oneshot
 RemainAfterExit=true
-## port = 0x7AC0 = 31424
-Environment=SWURL=http://localhost:31424/service/%i/managed
-ExecStartPre=/usr/bin/curl --silent -X POST ${SWURL}/true
+ExecStartPre=/usr/bin/sw manage %i
 ExecStart=/usr/bin/true
-ExecStopPost=/usr/bin/curl --silent -X POST ${SWURL}/false
+ExecStopPost=/usr/bin/sw unmanage %i
 Restart=no
 StandardOutput=journal
 StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

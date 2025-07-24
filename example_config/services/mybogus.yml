@@ -1,5 +1,5 @@
 name: MyBogus
-issystemd: true
+issystemd: false
 shifts:
   Overnight:
     setup: "echo at `date --date @$SHIFTWRAP_CLOCK` do something in shell to setup"

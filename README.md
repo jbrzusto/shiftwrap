@@ -1,13 +1,22 @@
 # Shiftwrap
 
+## TLDR
+
+`sw run foo sunrise-1h sunset+1h`
+
+Systemd service `foo` will run from 1 hour before sunrise to 1 hour after sunset each day,
+whenever the system is up, even if it boots into that time period.
+
+## Introduction
+
 `Shiftwrap` wraps `systemd` services to ensure they are running during one or more
 daily shifts.  Shift start and stop times can be fixed times of day, or
 relative to solar events such as sunrise.  Each shift can have start-up
-or take-down code that can be used to make the service run differently than
+and/or take-down code that can be used to make the service run differently than
 in other shifts, e.g. by modifying a config file.
 
 When shiftwrap is used to wrap a service, that service will run during all
-portions of its defined shifts for which the computer is up, so if the
+portions of its defined shifts for which the system is up, so if the
 computer boots into the middle of a service shift, the service will be started
 immediately and stopped at the end of that shift.
 
@@ -16,11 +25,11 @@ the wrapped services are running.  A special case of this is to sleep
 the system between service shifts; informally: *when no wrapped
 service is running a shift, sleep*.  This can be useful for energy-constrained settings.
 
-Shifts for your wrapped service `X` are defined in the file `/etc/shiftwrap/X.yml`
+Shifts for your wrapped service `X` are defined in the file `/etc/shiftwrap/services/X.yml`
 (see below for the syntax). You can send commands to a running `shiftwrapd` to define new
 services.
 
-## Usage:
+## Usage
 
 To control a shiftwrapped service, use `systemctl` commands, but with your
 service as the parameter to the `shiftwrap@` service template.  If
@@ -42,7 +51,7 @@ placed under shiftwrap control after each reboot.
 ```
 systemctl enable [--now] shiftwrap@foo
 ```
-After the next reboot, your service will be started/stopped by shiftwrap, according to the shifts defined in `/etc/shiftwrap/foo.yml`.
+After the next reboot, your service will be started/stopped by shiftwrap, according to the shifts defined in `/etc/shiftwrap/services/foo.yml`.
 If your service was already enabled directly with `systemctl`, you must first
 disable it with `systemctl disable foo`.  If you specify the `--now` option, then this command also does `systemctl start shiftwrap@foo` (see below).
 
@@ -97,15 +106,12 @@ shifts:
     setup: SHELL_COMMANDS
     start: TIMESPEC
     stop: TIMESPEC
-    mustinclude: TIMESPEC
-    mustexclude: TIMESPEC
     takedown: SHELL_COMMANDS
   LabelForShift2:
     setup: SHELL_COMMANDS
     start: TIMESPEC
     stop: TIMESPEC
-    mustinclude: TIMESPEC
-    mustexclude: TIMESPEC
+    stopbeforestart: true
     takedown: SHELL_COMMANDS
   ...
 ```
@@ -235,6 +241,50 @@ you also run this shell command:
    systemctl enable shiftwrap@amcam
 ```
 
+## Same-day versus Overnight Shifts
+For some shift definitions, `Start` and `Stop` are calculated on different days.
+e.g. for this shift:
+```
+overnight:
+  start: sunset
+  stop: sunrise
+```
+
+it is clear the user wants the service to start at *today's* sunset
+and stop at *tomorrow's* sunrise.  The user's intent is clear because
+on a given day, `sunrise` precedes `sunset`, so for `start` to precede
+`stop`, the latter must be calculated for tomorrow.
+
+In contrast, for this shift, which swaps the two times:
+```
+daytime:
+  start: sunrise
+  stop: sunset
+```
+it is clear the user wants the service to start at *today's* sunrise, and stop
+at *today's* sunset.  Again, this intent is clear because `sunrise` precedes
+`sunset` every day.
+
+It is possible to define a shift so that the order of `start` and `stop`,
+calculated the same day, changes over the course of the year.  This leads to ambiguity
+as to which `start` should be paired with which `stop` when the ordering changes.
+To clarify this situation and avoid anomalous shifts, `shiftwrap` enforces these rules:
+- a shift definition is treated as one of two types:
+  - **StartBeforeStop**: the `start` must precede the `stop` when both are calculated
+  for the same day
+  - **StopBeforeStart**: the 'stop' must precede the 'start' when both are calculated
+  for the same day
+- `shiftwrap` guesses the shift type by calculating `start` and `stop` times in GMT for
+  the location at 0 degrees West, 0 degrees North and 0 metres ASL on March 20, 2025 (the March equinox),
+  and using the ordering of these as the type.
+- for any day, if the calculated `start` and `stop` times do not match the shift type,
+  i.e. `start` < `stop` for a `StopBeforeStart` shift, or `stop` < `start` for a `StartBeforeStop` shift,
+  those times are discarded for that day, and no service running time results from them.  (It is still possible
+  that there will be some service running time for that day, if one of the adjacent days defines a non-anomalous shift
+  that overlaps the day, or if a different shift definition is not anomalous.)
+- if your intent doesn't agree with `shiftwrap`'s guess, you can fix that by specifying
+  `stopbeforestart: true` or `stopbeforestart: false` for the shift definition in the yaml file.
+
 ## Global Shiftwrap Configuration
 Additional configuration options can be set in the file `$SHIFTWRAP_DIR/shiftwrap.yaml`:
 
@@ -324,6 +374,7 @@ Here's the API:
 
 - **GET**: Return the shiftwrapd configuration.  These are items whose defaults are read from `shiftwrap.xml` at startup.
 - **PUT**:
+
 `
 /time
 `
@@ -377,95 +428,105 @@ Note:  For this and other APIs, `{sn}` can be an instantiated service name, e.g.
 
 - **GET**: returns an array of shift changes of service `sn` arising from shifts that overlap the given `date`.  These are *raw* shift changes:  they might include overlaps and shifts shorter than the service's `MinRuntime` property.
 
-`
-/service/{sn}/shiftchanges/{date}
-`
+## Convenience tool *sw*
 
-- **GET**: return an array of shift changes for service `sn` arising from shifts that overlap the given date.  These are *cooked* shift changes:  overlapping shifts have been merged, and any shifts shorter than the service's `minruntime` property have been removed.
 
-## Shift Time Semantics
+sw is a shell script that simplifies calling some shiftwrap APIs from the command line.
+Here is its documentation:
 
-Before describing shiftwrap's algorithm for calculating shifts, here are some examples of shift definitions where the user's intention seems clear, but for which there are locations and dates that seem to misbehave.
-
-### Same Day
-```
-   start: sunrise+1h
-   stop: 11:30
-```
-
-- **Intended Behaviour**: The shift runs from 1 hour after sunrise today until 11:30 am today.
-- **Anomaly**: If sunrise is 10:45, then `start` is 11:45 but `stop`
-is 11:30.  This could mean either an empty shift, or a very long shift
-running from yesterday's `start` time to today's `stop` time, as for
-an overnight shift.
-
-### Overnight
-```
-   start: dusk+3h
-   stop: dawn-3h
-```
-
-- **Intended Behaviour**: The shift runs from 3 hours after dusk today until 3 hours before dawn tomorrow.
-- **Anomaly**: If the period between dusk today and dawn tomorrow is
-  less than 6 hours, then the `stop` time from tomorrow is before the
-  `start` time from today.
-
-## The Shift Change Algorithm
-
-Running periods for a service S are calculated for date D like so:
- - each shift definition is allowed to overlap D in at most two distinct
-   intervals (e.g. an overnight shift will have both an early morning and late
-   night overlap)
- - shift definitions are assumed to be reasonably well-behaved: the shift
-   change time.Times calculated from a shift definition for today are all assumed to be
-   later than those calculated for yesterday, and earlier than those calculated for
-   tomorrow (calculated shift change times do not have to occur on the date for which they
-   are calculated, though; e.g. `sunset+6h` might be a time after midnight)
- - let T1 = times computed for `D` and following days until reaching a day which does not add a running period that overlaps `D`
- - let T2 = times computed for `D-1` and preceding days until reaching a day which does not add a running period that overlaps `D`
- - let T3 = the union of T1 and T2, sorted in increasing order of time
- - calculate running periods from T3 according to the sub-algorithm below
- - merge running periods from all shift definitions
- - remove running periods which are too short or which don't overlap date D
-
-#### Sub-algorithm: running periods for a shift
-
-For the times in `T3` defined above:
- - let `On` = be the times calculated from `X.start`
- - let `Off` = be the times calculated from `X.stop`
- - let `In` = be the times calculated from `X.mustinclude`, if present
- - let `Out` = be the times calculated from `X.mustexclude`, if present
- - let R = all intervals starting at a time in `On` and ending at the the first time in `Off` which comes later.
- - if the shift has a `mustinclude` field, remove from R any intervals which do not contain a time in `In`
- - if the shift has a `mustexclude` field, remove from R any intervals which contain a time in `Out`
- - what remains in `R` is the set of runnning periods for the shift.
-
-### Preventing Anomalous Shifts with MustInclude and MustExclude
-
-You can use the `MustInclude` and `MustExclude` fields to prevent
-anomalous shifts.  These fields can preserve the `Same-Day` or
-`Overnight` character of the shift, but also permit other kinds of
-filtering.
-
-### Same-Day without Anomalies
+**Usage:**
 
 ```
-   start: sunrise+1h
-   stop: 11:30
-   mustexclude: 00:00
+   sw ACTION ARGS...
 ```
 
-- **Anomaly**: sunrise+1h is later than 11:30
-- **Anomalous Running Period**: from sunrise+1h today until 11:30 tomorrow
-- **Avoided because**: that running period would include 00:00 (midnight), which is forbidden by the `mustexclude` field.
+where `ACTION ARGS...` is one of the following phrases:
 
-### Overnight Without Anomalies
-```
-   start: dusk+3h
-   stop: dawn-3h
-   mustinclude: 00:00
+`config`
+
+   - prints the global shiftwrap configuration
+
+`time`
+
+   - prints the current time according to the shiftwrapd clock,
+     which can be a warped clock (used for testing)
+
+`manage SERVICE`
+
+   - ensures shiftwrapd is managing the service named SERVICE; this
+     will start SERVICE if the current time is within a shift with at
+     least min_runtime remaining.  Normally, this command is invoked
+     indirectly, by a user doing systemctl enable shiftwrap@SERVICE
+
+`unmanage SERVICE`
+
+   - ensures shiftwrapd is *not* managing the service named SERVICE;
+     this will *not* stop the service. Normally, this command is invoked
+     indirectly, by a user doing systemctl disable shiftwrap@SERVICE
+
+`run SERVICE START STOP`
+
+   - ensures shiftwrapd is managing the service named SERVICE, which must
+     be an existing systemd service.  A single shift will be created that
+     starts at START and stops at STOP.  START and STOP can each be either
+     a fixed time of day (e.g. 12:00) or a solar event name followed by
+     an offset (e.g. Sunrise-1h, Sunset+15m).  A shiftwrap config file for
+     the service will be written to the config folder, typically /etc/shiftwrap/services
+     This is a quick-and-dirty command meant to simplify a common use-case.
+
+`services`
+
+   - lists names of services configured for shiftwrap, whether or not
+     currently managed
+
+`service SERVICE`
+
+   - shows details of service named SERVICE
+
+`shiftchanges`
+
+   - shows currently-scheduled shift-changes for next day or so on all services
+
+`shiftchanges SERVICE`
+
+   - shows currently-scheduled shift-changes for next day or so for service named SERVICE
+
+`shiftchanges SERVICE YYYY-MM-DD`
+
+   - shows shift-changes that would be scheduled on date YYYY-MM-DD for service named SERVICE
+
+`shiftchanges SERVICE YYYY-MM-DD RAW`
+
+   - shows *all* shift-changes that would be scheduled on date YYYY-MM-DD for service named SERVICE,
+     before merging overlapping shifts and without removing shifts shorter than min_runtime
+
 ```
 
-- **Anomaly**: the time between dusk today and dawn tomorrow is less than 6 hours
-- **Anomalous Running Period**: early today (i.e. dusk yesterday + 3h) to late today (i.e. dawn tomorrow - 3h)
-- **Avoided because**: that running period would not include 00:00 (midnight), which is mandated by the `mustinclude` field.
+## **shiftwrapd** options
+
+The following options change the behaviour of `shiftwrapd`.  The
+`-clockdil` and `-clockepoch` functions allow `shiftwrapd` to use a
+[warped clock](https://github.com/SnugglyCoder/timewarper) (i.e. one
+with a different origin and speed than the system clock).  This can be
+useful for testing proposed shift schedules.  The warped clock only
+affects when and for how long `shiftwrap` starts and stops services;
+if those services read the system clock, they will still obtain the
+true time.  The current time of the warped clock is available via the
+`/time` API, and is available as environment variable `SHIFTWRAP_TIME`
+to each shift's `Setup` and `Takedown` scripts.  You will have to run
+`shiftwrapd` manually, or modify `/etc/systemd/system/shiftwrapd.service`, if you
+want to use non-default options.
+
+**Options:**
+
+`-clockdil float`
+
+clock dilation factor; 1 = normal clock speed; 2 = double clock speed, etc. (default 1)
+
+`-clockepoch string`
+
+clock epoch as YYYY-MM-DD HH:MM; default ("") means 'now'.  If neither -clockepoch nor -clockdil are specified, shiftwrapd uses the standard system clock
+
+`-httpaddr string`
+
+address:port from which to operate HTTP server; disabled if empty (default ":31424" = TCP port 0x7ac0 on all interfaces)

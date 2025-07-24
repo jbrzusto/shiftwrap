@@ -2,10 +2,7 @@ package shiftwrap
 
 import (
 	"container/heap"
-	"fmt"
 	//	"log"
-	"strings"
-	"time"
 )
 
 // ShiftChangeQueue is a priority queue heap for ShiftChange values,
@@ -14,13 +11,13 @@ import (
 // (by service name) using Remove().
 // The count of ShiftChange for each service is maintained
 type ShiftChangeQueue struct {
-	ShiftChanges []ShiftChange
+	ShiftChanges ShiftChanges
 	Count        map[*Service]int
 }
 
 func NewShiftChangeQueue() *ShiftChangeQueue {
 	return &ShiftChangeQueue{
-		ShiftChanges: []ShiftChange{},
+		ShiftChanges: ShiftChanges{},
 		Count:        map[*Service]int{},
 	}
 }
@@ -114,20 +111,5 @@ func (s *ShiftChangeQueue) Head() (rv *ShiftChange) {
 
 // String represents the heap as a string
 func (s *ShiftChangeQueue) String() string {
-	rv := strings.Builder{}
-	for _, sc := range s.ShiftChanges {
-		var action string
-		switch sc.Type {
-		case Start:
-			action = "Start At"
-		case Stop:
-			action = "Stop  At"
-		case MustInclude:
-			action = "Must Inc"
-		case MustExclude:
-			action = "Must Exc"
-		}
-		rv.WriteString(fmt.Sprintf("%15s: %s %s\n", sc.Service().Name, action, sc.At.Format(time.StampMilli)))
-	}
-	return rv.String()
+	return s.ShiftChanges.String()
 }

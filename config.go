@@ -21,7 +21,7 @@ type Config struct {
 	// requires significant time for Setup or Takedown.
 	// DefaultMinRuntime is always treated as a real duration,
 	// even if ShiftWrap is using a dilated clock.
-	DefaultMinRuntime time.Duration `yaml:"default_min_runtime" json:"defaultMinRuntime"`
+	DefaultMinRuntime TidyDuration `yaml:"default_min_runtime" json:"defaultMinRuntime"`
 
 	// IdleHandlerCommand is a shell command to run when starting an idle period
 	// These variables are set in its environment:
@@ -59,7 +59,7 @@ type Config struct {
 	// otherwise cause it to sleep immediately).
 	// IdleHandlerInitialDelay is always treated as a real duration,
 	// even if ShiftWrap is using a dilated clock.
-	IdleHandlerInitialDelay time.Duration `yaml:"idle_handler_initial_delay" json:"idleHandlerInitialDelay"`
+	IdleHandlerInitialDelay TidyDuration `yaml:"idle_handler_initial_delay" json:"idleHandlerInitialDelay"`
 
 	// IdleHandlerMinRuntime is the minimum idle time required
 	// before the idle handler is called.  e.g. if the idle
@@ -69,7 +69,7 @@ type Config struct {
 	// an idle period of less than that.  For idle periods less
 	// than this value, shiftwrapd simply waits for the next
 	// ShiftEvent.
-	IdleHandlerMinRuntime time.Duration `yaml:"idle_handler_min_runtime" json:"idleHandlerMinRuntime"`
+	IdleHandlerMinRuntime TidyDuration `yaml:"idle_handler_min_runtime" json:"idleHandlerMinRuntime"`
 
 	// ServerAddress is the IP:PORT address for the http server by which
 	// shiftwrapd is controlled
@@ -84,11 +84,11 @@ type Config struct {
 }
 
 var DefaultConfig = Config{
-	IdleHandlerInitialDelay: 2 * time.Second,
-	IdleHandlerMinRuntime:   2 * time.Second,
+	IdleHandlerInitialDelay: TidyDuration(2 * time.Second),
+	IdleHandlerMinRuntime:   TidyDuration(2 * time.Second),
 	IdleHandlerCommand:      "echo would do sudo rtc_wake -m mem -s $SHIFTWRAP_IDLE_DURATION",
 	Shell:                   "/bin/bash",
-	DefaultMinRuntime:       1 * time.Minute,
+	DefaultMinRuntime:       TidyDuration(1 * time.Minute),
 	ServerAddress:           ":9009",
 }
 

@@ -26,6 +26,7 @@ const (
 
 var (
 	confDir             string
+	serviceConfDir      string
 	SW                  *shiftwrap.ShiftWrap
 	clockDilationFactor float64
 	clockEpochString    string
@@ -55,6 +56,7 @@ func main() {
 	if confDir == "" {
 		confDir = DefaultConfDir
 	}
+	serviceConfDir = path.Join(confDir, "services")
 	flag.Parse()
 	var cl timewarper.AClock
 	if clockEpochString != "" {
@@ -71,7 +73,7 @@ func main() {
 	cl.SetUnsafe(true)
 	SW = shiftwrap.NewShiftWrapWithAClock(cl)
 	SW.ReadConfig(confDir)
-	SW.ReadConfig(path.Join(confDir, "services"))
+	SW.ReadConfig(serviceConfDir)
 	http.HandleFunc("/config", HandleConfig)
 	http.HandleFunc("/time", HandleTime)
 	http.HandleFunc("/timer", HandleTimer)
@@ -79,7 +81,7 @@ func main() {
 	http.HandleFunc("/services", HandleServices)
 	http.HandleFunc("/service/{sn}", HandleService)
 	http.HandleFunc("/service/{sn}/shiftchanges", HandleShiftChanges)
-	http.HandleFunc("/service/{sn}/shiftchanges/{date}/raw", HandleShiftChangesRaw)
+	http.HandleFunc("/service/{sn}/shiftchanges/{date}/raw", HandleShiftChangesDateRaw)
 	http.HandleFunc("/service/{sn}/shiftchanges/{date}", HandleShiftChangesDate)
 	http.ListenAndServe(httpAddr, nil)
 }
@@ -295,15 +297,26 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 										tmpsh.Stop = &sts
 									}
 								}
-								if setup, ok := shm["Setup"].(string); !ok {
-									errmsg += "Setup for shift " + n + " must be a string; "
-								} else {
-									tmpsh.Setup = setup
+								if v, have := shm["StopBeforeStart"]; have {
+									if sbs, ok := v.(bool); !ok {
+										errmsg += "StopBeforeStart for shift " + n + " must be a bool; "
+									} else {
+										tmpsh.StopBeforeStart = sbs
+									}
 								}
-								if takedown, ok := shm["Takedown"].(string); !ok {
-									errmsg += "Takedown for shift " + n + " must be a string; "
-								} else {
-									tmpsh.Takedown = takedown
+								if v, have := shm["Setup"]; have {
+									if setup, ok := v.(string); !ok {
+										errmsg += "Setup for shift " + n + " must be a string; "
+									} else {
+										tmpsh.Setup = setup
+									}
+								}
+								if v, have := shm["Takedown"]; have {
+									if takedown, ok := v.(string); !ok {
+										errmsg += "Takedown for shift " + n + " must be a string; "
+									} else {
+										tmpsh.Takedown = takedown
+									}
 								}
 								if errmsg == "" {
 									SW.AddShifts(s, tmpsh)
@@ -329,25 +342,30 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 				SW.ManageService(s, willManage)
 			}
 		}
+		if err := SW.WriteConfig(s, serviceConfDir); err != nil {
+			log.Printf("error (re-)writing config for service %s: %s", s.Name, err.Error())
+		}
 		HTOkay(w)
 	default:
 		HTNotImpl(w, r.Method+r.URL.Path)
 	}
 }
 
-func HandleShiftChangesRaw(w http.ResponseWriter, r *http.Request) {
-	doHandleShiftChanges(w, r, true, false)
-}
+type ShiftChangeRequestType int
 
-func HandleShiftChangesDate(w http.ResponseWriter, r *http.Request) {
+func HandleShiftChangesDateRaw(w http.ResponseWriter, r *http.Request) {
 	doHandleShiftChanges(w, r, true, true)
 }
 
-func HandleShiftChanges(w http.ResponseWriter, r *http.Request) {
-	doHandleShiftChanges(w, r, false, true)
+func HandleShiftChangesDate(w http.ResponseWriter, r *http.Request) {
+	doHandleShiftChanges(w, r, true, false)
 }
 
-func doHandleShiftChanges(w http.ResponseWriter, r *http.Request, withdate bool, cooked bool) {
+func HandleShiftChanges(w http.ResponseWriter, r *http.Request) {
+	doHandleShiftChanges(w, r, false, false)
+}
+
+func doHandleShiftChanges(w http.ResponseWriter, r *http.Request, withdate bool, raw bool) {
 	sn := r.PathValue("sn")
 	s := lookupService(w, sn, true)
 	if s == nil {
@@ -364,7 +382,7 @@ func doHandleShiftChanges(w http.ResponseWriter, r *http.Request, withdate bool,
 			}
 			date = date.Add(12 * time.Hour)
 			var b []byte
-			b, _ = json.Marshal(SW.ServiceRunningPeriods(s, date, !cooked))
+			b, err = json.Marshal(SW.ServiceShiftChanges(s, date, raw))
 			SendResponse(b, w)
 		} else {
 			b, _ := json.Marshal(s.GetCurrentShiftChanges())
