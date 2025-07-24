@@ -272,7 +272,7 @@ To clarify this situation and avoid anomalous shifts, `shiftwrap` enforces these
 - a shift definition is treated as one of two types:
   - **StartBeforeStop**: the `start` must precede the `stop` when both are calculated
   for the same day
-  - **StopBeforeStart**: the 'stop' must precede the 'start' when both are calculated
+  - **StopBeforeStart**: the `stop` must precede the `start` when both are calculated
   for the same day
 - `shiftwrap` guesses the shift type by calculating `start` and `stop` times in GMT for
   the location at 0 degrees West, 0 degrees North and 0 metres ASL on March 20, 2025 (the March equinox),
