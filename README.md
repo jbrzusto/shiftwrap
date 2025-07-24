@@ -21,9 +21,10 @@ computer boots into the middle of a service shift, the service will be started
 immediately and stopped at the end of that shift.
 
 Optionally, shiftwrap can be configured to run a command when none of
-the wrapped services are running.  A special case of this is to sleep
-the system between service shifts; informally: *when no wrapped
-service is running a shift, sleep*.  This can be useful for energy-constrained settings.
+the wrapped services are running - see the **Idle Handler** section
+below.  A special case of this is to sleep the system between service
+shifts; informally: *when no wrapped service is running a shift,
+sleep*.  This can be useful for energy-constrained settings.
 
 Shifts for your wrapped service `X` are defined in the file `/etc/shiftwrap/services/X.yml`
 (see below for the syntax). You can send commands to a running `shiftwrapd` to define new
@@ -292,16 +293,23 @@ Additional configuration options can be set in the file `$SHIFTWRAP_DIR/shiftwra
 These are used to calculate solar event times, and are required if any
 `Start` or `Stop` fields refer to a solar event:
 ```yaml
-- Latitude: LAT
-- Longitude: LON
-- Altitude: ALT  # defaults to 0
+observer:
+   latitude: LAT
+   longitude: LON
+   altitude: ALT  # defaults to 0
 ```
 
 ### Other parameters
 Default values across all services for `min_runtime` and `shell`:
 ```yaml
-- DefaultMinRuntime: DURATION
-- DefaultShell: PATH_TO_SHELL
+default_min_runtime: DURATION
+shell: PATH_TO_SHELL
+default_min_runtime: 300s
+location: America/Halifax
+server_address: "localhost:9009"
+idle_handler_command: "echo rtcwake -m mem -s $SHIFTWRAP_IDLE_DURATION"
+idle_handler_min_runtime: 5m
+idle_handler_initial_delay: 3m
 ```
 
 ## Notes:
@@ -528,3 +536,34 @@ clock epoch as YYYY-MM-DD HH:MM; default ("") means 'now'.  If neither -clockepo
 `-httpaddr string`
 
 address:port from which to operate HTTP server; disabled if empty (default ":31424" = TCP port 0x7ac0 on all interfaces)
+
+## The Idle Handler
+
+In some settings, you want a system to operate a small number of tasks, and only over certain shifts.  The rest of the time,
+the system might as well be asleep, to conserve energy.  `shiftwrapd` has an optional **Idle Handler**, which is invoked
+when no defined shift is running.  There is an option to skip the idle handler if some service will soon start a shift,
+so that idling is only done when there is a sufficiently long idle period.
+There is also an option to not run the idle handler too soon after `shiftwrapd` starts up, to prevent thrashing and/or
+to provide a recurring failsafe period during which the system will be up and presumably reachable, e.g. by ssh.
+
+**Settings in shiftwrap.xml**
+
+`idle_handler_command: "echo rtcwake -m mem -s $SHIFTWRAP_IDLE_DURATION"`
+
+If an idle period has been calculated (i.e. no wrapped service has a shift), `shiftwrapd` will run
+this string will be run through the shell.  It has the following environment variables available:
+
+```
+        SHIFTWRAP_IDLE_DURATION          # seconds on real clock
+        SHIFTWRAP_IDLE_DURATION_DILATED  # seconds on warped clock
+        SHIFTWRAP_NEXT_EVENT_TIME        # seconds since the epoch, on real clock
+        SHIFTWRAP_IDLE_DURATION_DILATED  # seconds since the epoch, on warped clock
+```
+
+`idle_handler_min_runtime: 5m`
+
+don't run the idle handler command unless the upcoming idle period is at least 5 minutes long
+
+`idle_handler_initial_delay: 3m`
+
+don't run the idle handler unless `shiftwrapd` has already been running for 3 minutes.
