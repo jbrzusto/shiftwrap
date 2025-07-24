@@ -296,7 +296,13 @@ These are used to calculate solar event times, and are required if any
 observer:
    latitude: LAT
    longitude: LON
-   altitude: ALT  # defaults to 0
+   height: ALT  # defaults to 0
+```
+
+Note: for a quick and dirty estimate of your lat long, try:
+
+```sh
+curl --silent https://tools.keycdn.com/geo | grep -i -E '(latitude|longitude):'|tr -d ','
 ```
 
 ### Other parameters
@@ -395,7 +401,7 @@ if `shiftwrapd` was run with `-clockdilate` and/or `clockepoch` options
 `
 
 - **GET**: return the timer target; this is when the next shift change will happen.  The value is according
-to the `shitwrapd` clock (see `\time` agove)
+to the `shiftwrapd` clock (see `\time` agove)
 
 `
 /queue
@@ -548,16 +554,20 @@ to provide a recurring failsafe period during which the system will be up and pr
 
 **Settings in shiftwrap.xml**
 
-`idle_handler_command: "echo rtcwake -m mem -s $SHIFTWRAP_IDLE_DURATION"`
+These are settings controlling idle (and examples of their use) from `shiftwrap.xml`
 
-If an idle period has been calculated (i.e. no wrapped service has a shift), `shiftwrapd` will run
-this string will be run through the shell.  It has the following environment variables available:
+`idle_handler_command: "rtcwake -m mem -s $SHIFTWRAP_IDLE_DURATION"`
+
+If an idle period has been calculated (i.e. no wrapped service is
+running a shift at the moment), `shiftwrapd` will run this command
+through the shell.  The example tries to suspend the machine for the full idle period.
+The following environment variables are available to the shell script:
 
 ```
-        SHIFTWRAP_IDLE_DURATION          # seconds on real clock
-        SHIFTWRAP_IDLE_DURATION_DILATED  # seconds on warped clock
-        SHIFTWRAP_NEXT_EVENT_TIME        # seconds since the epoch, on real clock
-        SHIFTWRAP_IDLE_DURATION_DILATED  # seconds since the epoch, on warped clock
+        SHIFTWRAP_IDLE_DURATION            # seconds on real clock
+        SHIFTWRAP_IDLE_DURATION_DILATED    # seconds on warped clock
+        SHIFTWRAP_NEXT_EVENT_TIME          # seconds since the epoch, on real clock
+        SHIFTWRAP_NEXT_EVENT_TIME_DILATED  # seconds since the epoch, on warped clock
 ```
 
 `idle_handler_min_runtime: 5m`

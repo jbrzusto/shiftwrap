@@ -1265,7 +1265,7 @@ func (sw *ShiftWrap) doIdle(next time.Time) {
 			fmt.Sprintf("SHIFTWRAP_IDLE_DURATION=%d", sw.Clock.RealDuration(left)/1e9),
 			fmt.Sprintf("SHIFTWRAP_IDLE_DURATION_DILATED=%d", sw.Clock.RealDuration(left)/1e9),
 			fmt.Sprintf("SHIFTWRAP_NEXT_EVENT_TIME=%d", sw.Clock.RealTime(next).UnixNano()/1e9),
-			fmt.Sprintf("SHIFTWRAP_IDLE_DURATION_DILATED=%d", sw.Clock.RealTime(next).UnixNano()/1e9),
+			fmt.Sprintf("SHIFTWRAP_NEXT_EVENT_TIME_DILATED=%d", sw.Clock.RealTime(next).UnixNano()/1e9),
 		)
 		if output, err := cmd.Output(); err != nil {
 			log.Printf("error in idle handler %s: %s", cmd.String(), err.Error())
