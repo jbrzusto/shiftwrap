@@ -500,8 +500,6 @@ where `ACTION ARGS...` is one of the following phrases:
    - shows *all* shift-changes that would be scheduled on date YYYY-MM-DD for service named SERVICE,
      before merging overlapping shifts and without removing shifts shorter than min_runtime
 
-```
-
 ## **shiftwrapd** options
 
 The following options change the behaviour of `shiftwrapd`.  The
