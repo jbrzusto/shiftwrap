@@ -36,7 +36,7 @@ jobs:
       - name: Build for Raspbian (arm64)
         run: |
           mkdir -p bin
-          GOOS=linux GOARCH=arm64 go build -o bin/shiftwrapd .
+          GOOS=linux GOARCH=arm64 go build -o bin/shiftwrapd ./cmd/shiftwrapd
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
