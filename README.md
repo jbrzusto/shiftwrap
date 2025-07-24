@@ -318,7 +318,7 @@ idle_handler_min_runtime: 5m
 idle_handler_initial_delay: 3m
 ```
 
-## Notes:
+## Notes
 
 - shift `start` and `stop` times are calculated each day, if necessary
   (i.e. if they depend on solar events)
