@@ -75,7 +75,7 @@ type Config struct {
 	// shiftwrapd is controlled
 	ServerAddress string `yaml:"server_address" json:"serverAddress"`
 
-	// Observer is the lat/long/altitude of the location at which ShiftWrap is running; used for
+	// Observer is the lat/long/height of the location at which ShiftWrap is running; used for
 	// calculating times of solar events
 	Observer suncalc.Observer `yaml:"observer" json:"observer"`
 

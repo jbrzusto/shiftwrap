@@ -85,7 +85,6 @@ type Service struct {
 	IsSystemd bool
 	// MinRuntime is the minimum time Service should be run; shorter shifts are dropped
 	// without running Setup or Takedown
-	//	MinRuntime time.Duration
 	MinRuntime TidyDuration
 	// Shifts is a map from Shift.Name to &Shift
 	Shifts NamedShifts
@@ -106,21 +105,6 @@ type Service struct {
 	// shiftwrap is the ShiftWrap which owns this service, if any
 	shiftwrap *ShiftWrap
 }
-
-// ServiceEvent represents a change in a Service
-type ServiceEvent int
-
-const (
-	// SchedulerReady is sent when the Scheduler for a Service has been started
-	SchedulerReady ServiceEvent = iota
-	// SchedulerDone is sent when the Scheduler for a Service has been stopped
-	SchedulerDone
-	// ServiceRemoved is sent when a Service has been removed from the ShiftWrap
-	// e.g. from a call to ShiftWrap.ShutDown()
-	ServiceRemoved
-	// ShiftsRedefined is sent when a Service's Shift definitions have changed
-	ShiftsRedefined
-)
 
 // Shift defines a portion of the day during which a Service should run,
 // based on fixed times of day and/or solar events with an optional offset.
@@ -925,7 +909,7 @@ var referenceSolarEvents SolarEvents
 // referneceDate is the time 20 Mar 2025, at noon UTC
 var referenceDate time.Time = time.Date(2025, 3, 20, 12, 0, 0, 0, time.UTC)
 
-// referenceObserver is at Lat=0, Long=0, Altitude=0
+// referenceObserver is at Lat=0, Long=0, Height=0
 var referenceObserver suncalc.Observer = suncalc.Observer{Location: time.Local}
 
 func init() {
