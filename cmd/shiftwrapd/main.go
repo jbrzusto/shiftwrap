@@ -196,6 +196,10 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 		// create service in case it doesn't already exist
 		if s == nil {
 			s = SW.ServiceByName(sn, true)
+			if s == nil {
+				HTErr(w, "unknown service: %s", sn)
+				return
+			}
 		}
 		setManaged := false
 		willManage := false

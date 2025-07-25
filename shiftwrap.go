@@ -589,8 +589,8 @@ func (sw *ShiftWrap) ServiceByName(sn string, create bool) (rv *Service) {
 	if rv = sw.services[sn]; rv != nil {
 		return
 	}
-	tpn, _, isInstance := strings.Cut(sn, "@")
-	if isInstance {
+	tpn, instance, haveAt := strings.Cut(sn, "@")
+	if haveAt && instance != "" {
 		tp := sw.services[tpn+"@"]
 		if tp != nil {
 			// found a template, so instantiate it
