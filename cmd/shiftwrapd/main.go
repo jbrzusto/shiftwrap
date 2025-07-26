@@ -193,6 +193,9 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 		SW.DropService(sn)
 		HTOkay(w)
 	case http.MethodPut:
+		// note whether service existed; this will affect whether it has to go through
+		// an UnManage / Manage cycle, to delete stale state
+		serviceExisted := true
 		// create service in case it doesn't already exist
 		if s == nil {
 			s = SW.ServiceByName(sn, true)
@@ -200,6 +203,7 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 				HTErr(w, "unknown service: %s", sn)
 				return
 			}
+			serviceExisted = false
 		}
 		setManaged := false
 		willManage := false
@@ -329,7 +333,19 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 			if errmsg != "" {
 				HTErr(w, "errors in PUT Service: `%s`", errmsg)
 				return
-			} else if setManaged {
+			}
+			if serviceExisted && s.IsManaged {
+				// service was being managed, so clear shift-changes for the service
+				// because new parameters may have invalidated them.
+				SW.ManageService(s, false)
+				if !setManaged {
+					// setManaged was not explicitly specified, so management should
+					// continue.  This happens in the `if` below.
+					setManaged = true
+					willManage = true
+				}
+			}
+			if setManaged {
 				SW.ManageService(s, willManage)
 			}
 		}
