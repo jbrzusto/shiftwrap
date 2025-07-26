@@ -742,6 +742,7 @@ func (sw *ShiftWrap) CalculateShiftChanges(s *Service, t time.Time) (rv time.Tim
 	s.shiftChanges = sw.ServiceShiftChanges(s, t, false)
 	s.shiftChangeIndex = -1
 	// log.Printf("shiftchanges for %s at %s: %v", s.Name, t.Format(time.DateTime), s.shiftChanges)
+	rv = t
 	return
 }
 
