@@ -459,7 +459,8 @@ func (s *Service) CheckIfRunning() bool {
 	}
 	ss := strings.TrimSpace(string(out))
 	s.haveCheckedRunning = true
-	return activeStatus[ss]
+	s.running = activeStatus[ss]
+	return s.running
 }
 
 // IsRunning returns true if the Service is marked as running; systemd is queried if necessary
@@ -467,8 +468,7 @@ func (s *Service) IsRunning() bool {
 	if !s.IsSystemd || s.haveCheckedRunning {
 		return s.running
 	}
-	s.running = s.CheckIfRunning()
-	return s.running
+	return s.CheckIfRunning()
 }
 
 // GetCurrentShiftChanges returns the current ShiftChanges for the service
@@ -662,6 +662,7 @@ func (s *Service) Instantiate(fullName string) (rv *Service) {
 }
 
 // AddService adds service s to the pool of configured Services.
+// If not a template, check whether the service is already running.
 func (sw *ShiftWrap) AddService(s *Service) (err error) {
 	if _, have := sw.services[s.Name]; have {
 		err = fmt.Errorf("service %s already defined", s.Name)
@@ -674,6 +675,9 @@ func (sw *ShiftWrap) AddService(s *Service) (err error) {
 	}
 	if s.Shifts == nil {
 		s.Shifts = map[string]*Shift{}
+	}
+	if !IsTemplate(s.Name) {
+		s.CheckIfRunning()
 	}
 	return
 }
@@ -983,9 +987,6 @@ func (sw *ShiftWrap) ReadConfig(confDir string) {
 				if err = s.Parse(buf); err == nil {
 					s.Name = strings.TrimSuffix(de.Name(), ".yml")
 					sw.AddService(s)
-					if !strings.Contains(s.Name, "@") {
-						s.IsRunning()
-					}
 				}
 			}
 		}
@@ -1006,6 +1007,15 @@ func (sw *ShiftWrap) WriteConfig(s *Service, confDir string) (err error) {
 	}
 	err = os.WriteFile(p, b, 0644)
 	return
+}
+
+// IsTemplate returns true if n is the name of a Service template
+func IsTemplate(n string) bool {
+	i := strings.IndexRune(n, '@')
+	if i == len(n)-1 {
+		return true
+	}
+	return false
 }
 
 // solarEventNames holds the lower-case names of all solar events in a
