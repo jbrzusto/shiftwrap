@@ -101,7 +101,6 @@ then after the next boot, your service `foo` will again be controlled by shiftwr
 
   - an `X.yaml` defines one service, and looks like:
 ```yaml
-name: NAME
 issystemd: true/false
 minruntime: DURATION
 shifts:
@@ -118,9 +117,8 @@ shifts:
     takedown: SHELL_COMMANDS
   ...
 ```
-- the Service must have a unique `Name`, which is used to refer to the service in API calls.  This does not have to
-be the same as the filename.
-- if `issystemd` is `true`, then `Name` is the name of the systemd service; i.e. `X` .  The matching is case-sensitive.
+- the Service name is `X`
+- if `issystemd` is `true`, then `X` is the name of the wrapped systemd service.  The matching is case-sensitive.
 - if `issystemd` is `false`, no systemd service is started/stopped, but `setup` and `takedown`
 scripts are run at the appropriate times.  This allows use of `shiftwrap` to control
 things other than systemd services.

@@ -74,8 +74,9 @@ type TidyDuration time.Duration
 
 // Service describes a systemd service to run in shifts
 type Service struct {
-	// Name is the name of this Service
-	Name string
+	// Name is the name of this Service; it is not included explicitly when Marshalling/UnMarshalling
+	// as it comes from context (e.g. filename for .yml config file; path for URL request)
+	Name string `yaml:"-" json:"-"`
 	// IsManaged is true when shiftwrap is managing the service.  A Service is configured
 	// with an X.yml file in the /etc/shiftwrap directory, but whether it is managed or not
 	// is determined by use of systemctl; e.g. systemctl enable shitwrap@myservice
@@ -980,6 +981,7 @@ func (sw *ShiftWrap) ReadConfig(confDir string) {
 			} else {
 				s := &Service{}
 				if err = s.Parse(buf); err == nil {
+					s.Name = strings.TrimSuffix(de.Name(), ".yml")
 					sw.AddService(s)
 					if !strings.Contains(s.Name, "@") {
 						s.IsRunning()

@@ -253,19 +253,6 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 				}
 				delete(tmps, "MinRuntime")
 			}
-			if v, have := tmps["Name"]; have {
-				if vs, ok := v.(string); ok {
-					s.Name = vs
-					if s.Name != sn {
-						log.Printf("doing add+drop service")
-						SW.DropService(sn)
-						SW.AddService(s)
-					}
-				} else {
-					errmsg += "Name must be a string; "
-				}
-				delete(tmps, "Name")
-			}
 			if v, have := tmps["Shifts"]; have {
 				if vs, ok := v.(map[string]any); ok {
 					if len(vs) > 0 {
