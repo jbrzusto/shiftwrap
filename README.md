@@ -3,7 +3,7 @@
 ## TLDR
 
 ```sh
-sw run foo sunrise-1h sunset+1h
+$ sw run foo sunrise-1h sunset+1h
 
 # Systemd service foo will run from 1 hour before sunrise to 1 hour after sunset each day,
 # whenever the system is up, even if it boots into that time period.
