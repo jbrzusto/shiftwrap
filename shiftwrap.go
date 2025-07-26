@@ -87,6 +87,12 @@ type Service struct {
 	// MinRuntime is the minimum time Service should be run; shorter shifts are dropped
 	// without running Setup or Takedown
 	MinRuntime TidyDuration
+	// PersistInstances applies only to a templated Service: if
+	// true, instantiating the service will save an instantiated
+	// config file for it.  Normally, this is undesireable as a
+	// templated Service is instantiated via udev when an
+	// appropriate piece of hardware is detected.
+	PersistInstances bool
 	// Shifts is a map from Shift.Name to &Shift
 	Shifts NamedShifts
 	// shiftChanges is the most recently-calculated slice of ShiftChange for
@@ -998,8 +1004,12 @@ func (sw *ShiftWrap) ReadConfig(confDir string) {
 
 // WriteConfig (re-)writes the yaml file for a Service's configuration
 // to the given folder.  The filename will be s.Name lower-cased, with ".yml"
-// appended.
+// appended.  For an instantiated Service, config will not be written unless
+// the template Service's PersistInstances is true.
 func (sw *ShiftWrap) WriteConfig(s *Service, confDir string) (err error) {
+	if IsInstance(s.Name) && !s.PersistInstances {
+		return
+	}
 	p := path.Join(confDir, strings.ToLower(s.Name)+".yml")
 	b, err := yaml.Marshal(s)
 	if err != nil {
@@ -1007,6 +1017,15 @@ func (sw *ShiftWrap) WriteConfig(s *Service, confDir string) (err error) {
 	}
 	err = os.WriteFile(p, b, 0644)
 	return
+}
+
+// IsInstance returns true if n is the name of an instantiated Service
+func IsInstance(n string) bool {
+	i := strings.IndexRune(n, '@')
+	if i > 0 && i < len(n)-1 {
+		return true
+	}
+	return false
 }
 
 // IsTemplate returns true if n is the name of a Service template
