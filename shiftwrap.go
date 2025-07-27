@@ -1383,7 +1383,7 @@ func (sw *ShiftWrap) doShiftChange(now time.Time) {
 		// log.Printf("stopping shift %s at %v", sc.Shift().Label, sw.Clock.Now())
 		sw.Stop(s, sc.shift, now)
 	}
-	if !sw.advanceShiftChange(s, now) {
+	if !sw.advanceShiftChange(s, now, sc) {
 		log.Printf("stopping management of service %s", s.Name)
 		sw.doUnmanageService(s)
 	}
@@ -1393,7 +1393,7 @@ func (sw *ShiftWrap) doShiftChange(now time.Time) {
 // new shift changes if at the end of the shift change list.  It will look for up to
 // a year for shifts, printing an error and returning false if no shift is found.
 // Otherwise, returns true.
-func (sw *ShiftWrap) advanceShiftChange(s *Service, now time.Time) bool {
+func (sw *ShiftWrap) advanceShiftChange(s *Service, now time.Time, sc ShiftChange) bool {
 	s.shiftChangeIndex++
 	// log.Printf("shift change index for %s: %d, len=%d\n", s.Name, s.shiftChangeIndex, len(s.shiftChanges))
 	if s.shiftChangeIndex >= len(s.shiftChanges) {
@@ -1411,8 +1411,13 @@ func (sw *ShiftWrap) advanceShiftChange(s *Service, now time.Time) bool {
 				return false
 			}
 			sw.CalculateShiftChanges(s, t)
-			scn = NextShiftChange(now, s.shiftChanges)
-			// log.Printf("next shift change index for %s is %d", s.Name, scn)
+			// we use sc.At instead of now in the following, because the clock might have bypassed the times for some ShiftChanges,
+			// e.g. if one shift starts at the same time as another ends.
+			useTime := now
+			if !sc.IsZero() {
+				useTime = sc.At
+			}
+			scn = NextShiftChange(useTime, s.shiftChanges)
 			if scn >= 0 {
 				// we have a valid next shift change so add it and subsequent ones to the heap
 				sw.scQueue.Add(s.shiftChanges[scn:]...)
@@ -1441,7 +1446,7 @@ func (sw *ShiftWrap) doManageService(s *Service) {
 		return
 	}
 	now := sw.Clock.Now()
-	if !sw.advanceShiftChange(s, now) {
+	if !sw.advanceShiftChange(s, now, ShiftChange{}) {
 		log.Printf("refusing to manage service %s", s.Name)
 		return
 	}
