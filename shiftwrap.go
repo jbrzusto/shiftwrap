@@ -746,7 +746,7 @@ func (sw *ShiftWrap) CalculateShiftChanges(s *Service, t time.Time) (rv time.Tim
 	return
 }
 
-// NextShiftChange returns the index of the first ShiftChange in sc after
+// NextShiftChange returns the index of the first ShiftChange in sc at or after
 // t, or -1 if there is no such ShiftChange (i.e. if all ShiftChanges in sc are before
 // t).
 func NextShiftChange(t time.Time, scs ShiftChanges) (rv int) {
@@ -755,7 +755,7 @@ func NextShiftChange(t time.Time, scs ShiftChanges) (rv int) {
 	}
 	rv = sort.Search(len(scs),
 		func(i int) bool {
-			return scs[i].At.After(t)
+			return !scs[i].At.Before(t)
 		},
 	)
 	if rv == len(scs) {
