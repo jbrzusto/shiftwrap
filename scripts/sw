@@ -35,18 +35,20 @@ function get_time () {
     get time | $PP
 }
 
-# enable shiftwrap management of service $1
+# start shiftwrap management of service $1
 function manage_service () {
     put service/$1 '{"IsManaged":true}' | $PP
-    # make this persistent across reboots
-    systemctl enable shiftwrap@$1
+    if [[ "$2" == "always" ]]; then
+	systemctl enable shiftwrap@$1
+    fi
 }
 
-# disable shiftwrap management of service $1
+# stop shiftwrap management of service $1
 function unmanage_service () {
     put service/$1 '{"IsManaged":false}' | $PP
-    # make this persistent across reboots
-    systemctl disable shiftwrap@$1
+    if [[ "$2" == "always" ]]; then
+	systemctl disable shiftwrap@$1
+    fi
 }
 
 # list configured services
@@ -67,9 +69,17 @@ function run_service () {
 	echo unknown systemd service $1
 	exit 1
     fi
-    echo doing put service/$1 '{"IsManaged":true,"IsSystemd":true,"Name":"'$1'","Shifts":{"Shift_1":{"Start":"'$2'","Stop":"'$3'"}}}'
     if put service/$1 '{"IsManaged":true,"IsSystemd":true,"Name":"'$1'","Shifts":{"Shift_1":{"Start":"'$2'","Stop":"'$3'"}}}' | $PP; then
+	# make shiftwrap manage this service on every boot
 	sudo systemctl enable shiftwrap@$1
+    fi
+}
+
+# prevent shiftwrap from managing a service
+function norun_service () {
+    if put service/$1 '{"IsManaged":false}' | $PP; then
+	# prevent shiftwrap managing this service on subsequent boots
+	sudo systemctl disable shiftwrap@$1
     fi
 }
 
@@ -93,8 +103,6 @@ function shift_changes () {
 function usage () {
     # The text below is copied from README.md, with backticks and double-asterisks removed
     cat <<EOF
-sw - control the shiftwrap daemon
-
 Usage:
 
    sw ACTION ARGS...
@@ -108,23 +116,26 @@ config
 time
 
    - prints the current time according to the shiftwrapd clock,
-     which can be a dilated clock (used for testing)
+     which can be a warped clock (used for testing)
 
-manage SERVICE
+manage SERVICE [always]
 
    - ensures shiftwrapd is managing the service named SERVICE; this
      will start SERVICE if the current time is within a shift with at
      least min_runtime remaining.  Normally, this command is invoked
-     indirectly, by a user doing systemctl enable shiftwrap@SERVICE
+     indirectly, by a user doing systemctl start shiftwrap@SERVICE.
+	 The option always makes this management persist across reboots;
+	 i.e. it also does systemctl enable shiftwrap@SERVICE
 
-unmanage SERVICE
+unmanage SERVICE [always]
 
    - ensures shiftwrapd is *not* managing the service named SERVICE;
      this will *not* stop the service. Normally, this command is invoked
-     indirectly, by a user doing systemctl disable shiftwrap@SERVICE
+     indirectly, by a user doing systemctl stop shiftwrap@SERVICE
+	 The option always makes this management persist across reboots;
+	 i.e. it also does systemctl disable shiftwrap@SERVICE
 
 run SERVICE START STOP
-
    - ensures shiftwrapd is managing the service named SERVICE, which must
      be an existing systemd service.  A single shift will be created that
      starts at START and stops at STOP.  START and STOP can each be either
@@ -132,6 +143,14 @@ run SERVICE START STOP
      an offset (e.g. Sunrise-1h, Sunset+15m).  A shiftwrap config file for
      the service will be written to the config folder, typically /etc/shiftwrap/services
      This is a quick-and-dirty command meant to simplify a common use-case.
+	 shiftwrap immediately begins managing the service, which might also
+	 immediately start the service, if the current time is within the given
+	 shift.
+
+norun SERVICE
+   - ensures shiftwrapd will no longer manage the service named SERVICE.
+     This does not stop the service, but ensures that shiftwrapd will never
+	 start it again, even after subsequent reboots.
 
 services
 
@@ -169,12 +188,13 @@ shift
 case $ACTION in
     config ) config ;;
     "time" ) get_time ;;
-    manage ) manage_service $1 ;;
-    unmanage ) unmanage_service $1 ;;
+    manage ) manage_service $1 $2 ;;
+    unmanage ) unmanage_service $1 $2 ;;
     services ) list_services ;;
     service ) show_service $1 ;;
     shiftchanges ) shift_changes $1 $2 $3 ;;
     run ) run_service $1 $2 $3 ;;
+    norun ) norun_service $1 ;;
     * ) usage && exit -1
 esac
 exit 0

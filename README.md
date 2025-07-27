@@ -467,21 +467,24 @@ where `ACTION ARGS...` is one of the following phrases:
    - prints the current time according to the shiftwrapd clock,
      which can be a warped clock (used for testing)
 
-`manage SERVICE`
+`manage SERVICE [always]`
 
    - ensures shiftwrapd is managing the service named SERVICE; this
      will start SERVICE if the current time is within a shift with at
      least min_runtime remaining.  Normally, this command is invoked
-     indirectly, by a user doing systemctl enable shiftwrap@SERVICE
+     indirectly, by a user doing `systemctl start shiftwrap@SERVICE`.
+	 The option `always` makes this management persist across reboots;
+	 i.e. it also does `systemctl enable shiftwrap@SERVICE`
 
-`unmanage SERVICE`
+`unmanage SERVICE [always]`
 
    - ensures shiftwrapd is *not* managing the service named SERVICE;
      this will *not* stop the service. Normally, this command is invoked
-     indirectly, by a user doing systemctl disable shiftwrap@SERVICE
+     indirectly, by a user doing `systemctl stop shiftwrap@SERVICE`
+	 The option `always` makes this management persist across reboots;
+	 i.e. it also does `systemctl disable shiftwrap@SERVICE`
 
 `run SERVICE START STOP`
-
    - ensures shiftwrapd is managing the service named SERVICE, which must
      be an existing systemd service.  A single shift will be created that
      starts at START and stops at STOP.  START and STOP can each be either
@@ -489,6 +492,14 @@ where `ACTION ARGS...` is one of the following phrases:
      an offset (e.g. Sunrise-1h, Sunset+15m).  A shiftwrap config file for
      the service will be written to the config folder, typically /etc/shiftwrap/services
      This is a quick-and-dirty command meant to simplify a common use-case.
+	 shiftwrap immediately begins managing the service, which might also
+	 immediately start the service, if the current time is within the given
+	 shift.
+
+`norun SERVICE`
+   - ensures shiftwrapd will no longer manage the service named SERVICE.
+     This does not stop the service, but ensures that shiftwrapd will never
+	 start it again, even after subsequent reboots.
 
 `services`
 
