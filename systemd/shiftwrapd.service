@@ -5,6 +5,8 @@ Description=shiftwrap daemon
 KillSignal=SIGINT
 # load path to credentials etc.
 Environment=SHIFTWRAP_DIR=/etc/shiftwrap
+# ideally, wait until we know the clock is valid
+ExecStartPre=-chronyc waitsync 0 1
 ExecStart=/usr/bin/shiftwrapd
 ExecStartPost=/usr/bin/timeout 30 bash -c 'while ! ss -H -t -l -n sport = :31424 | grep LISTEN > /dev/null; do sleep 5; done'
 Restart=always
