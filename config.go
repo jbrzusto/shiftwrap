@@ -1,6 +1,7 @@
 package shiftwrap
 
 import (
+	"os"
 	"time"
 
 	"github.com/sixdouglas/suncalc"
@@ -81,6 +82,10 @@ type Config struct {
 
 	// LocationName is the name of the timezone for the Observer
 	LocationName string `yaml:"location" json:"location"`
+
+	// PrependPath is a path string which is prepended to the default path
+	// for any shell commands run by shiftwrap, e.g. Setup and Takedown scripts.
+	PrependPath string `yaml:"prepend_path" json:"prependPath"`
 }
 
 var DefaultConfig = Config{
@@ -97,5 +102,8 @@ func (c *Config) Parse(buf []byte) (err error) {
 		return
 	}
 	c.Observer.Location, err = time.LoadLocation(c.LocationName)
+	if c.PrependPath != "" {
+		os.Setenv("PATH", c.PrependPath+":"+os.Getenv("PATH"))
+	}
 	return
 }
