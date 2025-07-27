@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,10 +17,9 @@ import (
 )
 
 const (
-	DefaultConfDir       = "/etc/shiftwrap"
-	ConfDirEnvVar        = "SHIFTWRAP_DIR"
-	DefaultHTTPInterface = ""
-	DefaultHTTPPort      = 0x7AC0
+	DefaultConfDir  = "/etc/shiftwrap"
+	ConfDirEnvVar   = "SHIFTWRAP_DIR"
+	DefaultHTTPHost = "localhost:31424"
 )
 
 var (
@@ -49,7 +47,7 @@ FLAGS:
 
 func main() {
 	var httpAddr string
-	flag.StringVar(&httpAddr, "httpaddr", DefaultHTTPInterface+":"+strconv.Itoa(DefaultHTTPPort), "address:port from which to operate HTTP server; disabled if empty")
+	flag.StringVar(&httpAddr, "httpaddr", "", "address:port from which to operate HTTP server; empty means use value from shiftwrap.yml; if that too is empty, default is "+DefaultHTTPHost)
 	flag.Float64Var(&clockDilationFactor, "clockdil", 1, "clock dilation factor; 1 = normal clock speed; 2 = double clock speed, etc.")
 	flag.StringVar(&clockEpochString, "clockepoch", "", "clock epoch as YYYY-MM-DD HH:MM; default (\"\") means 'now'.  If neither -clockepoch nor -clockdil are specified, shiftwrapd uses the standard system clock")
 	confDir = os.Getenv(ConfDirEnvVar)
@@ -73,6 +71,12 @@ func main() {
 	cl.SetUnsafe(true)
 	SW = shiftwrap.NewShiftWrapWithAClock(cl)
 	SW.ReadConfig(confDir)
+	if httpAddr == "" {
+		httpAddr = SW.Conf.ServerAddress
+		if httpAddr == "" {
+			httpAddr = DefaultHTTPHost
+		}
+	}
 	SW.ReadConfig(serviceConfDir)
 	http.HandleFunc("/config", HandleConfig)
 	http.HandleFunc("/time", HandleTime)

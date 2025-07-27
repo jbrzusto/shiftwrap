@@ -293,12 +293,14 @@ Additional configuration options can be set in the file `$SHIFTWRAP_DIR/shiftwra
 
 ### Location parameters
 These are used to calculate solar event times, and are required if any
-`Start` or `Stop` fields refer to a solar event:
+`Start` or `Stop` fields refer to a solar event.  Timezone is used
+for interpreting any time-of-day Start/Stop values, e.g. "11:00"
 ```yaml
 observer:
    latitude: LAT
    longitude: LON
    height: ALT  # defaults to 0
+location: TIMEZONE
 ```
 
 Note: for a quick and dirty estimate of your lat long, try:
@@ -307,32 +309,45 @@ Note: for a quick and dirty estimate of your lat long, try:
 curl --silent https://tools.keycdn.com/geo | grep -i -E '(latitude|longitude):'|tr -d ','
 ```
 
-### Other parameters
-Default values across all services for `min_runtime` and `shell`:
+### Other parameters in `shiftwrap.yml`
+
 ```yaml
 default_min_runtime: DURATION
-shell: PATH_TO_SHELL
-default_min_runtime: 300s
-location: America/Halifax
-server_address: "localhost:9009"
-idle_handler_command: "echo rtcwake -m mem -s $SHIFTWRAP_IDLE_DURATION"
-idle_handler_min_runtime: 5m
-idle_handler_initial_delay: 3m
 ```
+
+The default minimum runtime for any shift of any service.  You can override it for any service.
+(Shifts shorter than the minimum runtime are skipped.)
+
+```yaml
+shell: PATH_TO_SHELL
+```
+
+The path to the shell used when running `Setup` and `Takedown` commands at the start and end of each shift.
+
+```yaml
+server_address: HOST:PORT
+```
+
+The address on which `shiftwrapd` listens for HTTP requests.  This can also be set by the `-httpaddr` flag for `shiftwrapd`, which overrides the value in the `shiftwrapd.yml`.  If neither of these is set, the default is `localhost:31424`.
+
+```yaml
+prepend_path: EXTRA_PATH
+```
+
+A path to prepend to the default system path when shiftwrapd calls `Setup` or `Takedown` shell scripts.  This can simplify these scripts by letting you omit paths on executables used by them.  The default is empty, which means no path is pre-pended.
+
+```yaml
+idle_handler_command: SHELL_SCRIPT
+idle_handler_min_runtime: DURATION
+idle_handler_initial_delay: DURATION
+```
+
+These fields configure the idle handler - see the [idle handler section below](#The Idle Handler).
 
 ## Notes
 
 - shift `start` and `stop` times are calculated each day, if necessary
   (i.e. if they depend on solar events)
-
-- if a shift has start TIMESPEC earlier than stop TIMESPEC (both
-  calculated today), that shift is entirely within "today" (in local
-  time).
-
-- if a shift has start TIMESPEC later than stop TIMESPEC (both
-  calculated today), that shift is treated as running overnight, and
-  the stop TIMESPEC is recalculated for the following day (if
-  needed; i.e. if based on a solar event).
 
 - for any set of overlapping shifts, the shifts are effectively merged
   into a larger shift:
