@@ -1345,12 +1345,12 @@ func (sw *ShiftWrap) doEnsureTimer() (rv time.Time) {
 		sw.prevHeadID = head.id
 		to := head.At
 		// log.Printf("current timer is %v; to=%v\n", sw.scTimer.Target(), to)
-		if to.Sub(sw.Clock.Now()) > time.Millisecond {
+		if sw.Clock.RealDuration(to.Sub(sw.Clock.Now())) > 10*time.Millisecond {
 			sw.scTimer.ResetTo(to)
 			// log.Printf("scTimer reset to %s\n", to.Format(time.StampMicro))
 		} else {
 			// log.Printf("shift change is in the past, reset timer to immediate future\n")
-			sw.scTimer.Reset(time.Millisecond)
+			sw.scTimer.Reset(10 * time.Millisecond / sw.Clock.RealDuration(time.Millisecond))
 			to = sw.scTimer.Target()
 		}
 		rv = to
