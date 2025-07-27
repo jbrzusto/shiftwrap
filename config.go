@@ -89,7 +89,7 @@ var DefaultConfig = Config{
 	IdleHandlerCommand:      "echo would do sudo rtc_wake -m mem -s $SHIFTWRAP_IDLE_DURATION",
 	Shell:                   "/bin/bash",
 	DefaultMinRuntime:       TidyDuration(1 * time.Minute),
-	ServerAddress:           ":9009",
+	ServerAddress:           ":31424", // 0x7ac0
 }
 
 func (c *Config) Parse(buf []byte) (err error) {
