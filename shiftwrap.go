@@ -824,9 +824,26 @@ func ShiftChangeComp(a, b ShiftChange) int {
 	return cmp.Compare(int64(a.At.UnixMicro()), int64(b.At.UnixMicro()))
 }
 
-// Sort shorts ShiftChanges by the .At field
+// Sort shorts ShiftChanges by the .At field Also, if two ShiftChanges
+// have the same time but correspond to different shifts, and one is a
+// start and the other is a stop, make sure the stop comes first both
+// in the ordering returned here, and (later) in the shiftchangequeue,
+// by adding 1 millisecond to the start time. This deals with the
+// presumably common situation where the user has defined the Stop
+// time of one shift to be the same as the Start time for another.
+// The shifts won't be merged by MergeOverlaps, and the scheduler will
+// thus ensure that a full stop/Takedown/Setup/start cycle occurs for
+// the Service.  This is especially desirable if the Setup or Takedown
+// scripts change parameters for the Service.
 func (scs ShiftChanges) Sort() {
-	slices.SortFunc(scs, ShiftChangeComp)
+	slices.SortStableFunc(scs, ShiftChangeComp)
+	for i := 0; i < len(scs)-1; i++ {
+		sc, sc2 := scs[i], scs[i+1]
+		if sc.At.Equal(sc2.At) && sc.IsStart && !sc2.IsStart && sc.shift != sc2.shift {
+			scs[i], scs[i+1] = scs[i+1], scs[i]
+			scs[i+1].At = scs[i+1].At.Add(time.Millisecond)
+		}
+	}
 }
 
 // MergeOverlaps takes a slice of ShiftChange and merges any
