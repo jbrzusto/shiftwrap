@@ -1,5 +1,6 @@
 [Unit]
 Description=shiftwrap daemon
+Before=udev
 
 [Service]
 KillSignal=SIGINT
