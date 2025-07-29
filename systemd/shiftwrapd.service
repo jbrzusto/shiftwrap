@@ -6,8 +6,10 @@ Before=udev
 KillSignal=SIGINT
 # load path to credentials etc.
 Environment=SHIFTWRAP_DIR=/etc/shiftwrap
-# ideally, wait until we know the clock is valid
-ExecStartPre=-chronyc waitsync 0 1
+# ideally, we would wait until we know the clock is valid, but then shiftwrapd might miss
+# API calls from udev rules, e.g. if hardware is detected which triggers starting a shiftwrap
+# service. So we don't do the following (but see https://github.com/jbrzusto/shiftwrap/issues/4 )
+# ExecStartPre=-chronyc waitsync 0 1
 ExecStart=/usr/bin/shiftwrapd
 ExecStartPost=/usr/bin/timeout 30 bash -c 'while ! ss -H -t -l -n sport = :31424 | grep LISTEN > /dev/null; do sleep 5; done'
 Restart=always
