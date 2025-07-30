@@ -5,7 +5,7 @@ observer:
   longitude: -65
   height: 125
 location: America/Halifax
-server_address: "localhost:9009"
+server_address: "localhost:31424"
 idle_handler_command: "echo rtcwake -m mem -s $SHIFTWRAP_IDLE_DURATION"
 idle_handler_min_runtime: 5m
 idle_handler_initial_delay: 3m
