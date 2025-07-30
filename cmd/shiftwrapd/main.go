@@ -142,13 +142,35 @@ func checkContentType(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+func getPayload(w http.ResponseWriter, r *http.Request) (rv map[string]any) {
+	if !checkContentType(w, r) {
+		return
+	}
+	var (
+		buf []byte
+		err error
+	)
+	buf, err = io.ReadAll(r.Body)
+	if err != nil {
+		HTErr(w, "bad or missing settings payload: %s", err.Error())
+		return
+	}
+	rv = map[string]any{}
+	if err = json.Unmarshal(buf, &rv); err != nil {
+		HTErr(w, "unable to parse JSON service payload: %s", err.Error())
+		rv = nil
+	}
+	return
+}
+
 func HandleConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		b, _ := json.Marshal(SW.Conf)
 		SendResponse(b, w)
 	case http.MethodPut:
-		if !checkContentType(w, r) {
+		tmps := getPayload(w, r)
+		if tmps == nil {
 			return
 		}
 	default:
@@ -207,7 +229,8 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 		SW.DropService(sn)
 		HTOkay(w)
 	case http.MethodPut:
-		if !checkContentType(w, r) {
+		tmps := getPayload(w, r)
+		if tmps == nil {
 			return
 		}
 		// note whether service existed; this will affect whether it has to go through
@@ -224,21 +247,7 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 		}
 		setManaged := false
 		willManage := false
-		var (
-			errmsg = ""
-			buf    []byte
-			err    error
-		)
-		buf, err = io.ReadAll(r.Body)
-		if err != nil {
-			HTErr(w, "bad or missing settings payload: %s", err.Error())
-			return
-		}
-		tmps := map[string]any{}
-		if err = json.Unmarshal(buf, &tmps); err != nil {
-			HTErr(w, "unable to parse JSON service payload: %s", err.Error())
-			return
-		}
+		errmsg := ""
 		if v, have := tmps["IsManaged"]; have {
 			if vb, ok := v.(bool); ok {
 				setManaged = true
