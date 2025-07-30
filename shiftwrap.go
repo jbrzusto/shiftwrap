@@ -1020,6 +1020,18 @@ func (sw *ShiftWrap) ReadConfig(confDir string) {
 	}
 }
 
+// WriteGlobalConfig (re-)writes the yaml file for Shiftwrap configuration
+// to the specified dir.
+func (sw *ShiftWrap) WriteGlobalConfig(confDir string) (err error) {
+	p := path.Join(confDir, "shiftwrapd.yml")
+	b, err := yaml.Marshal(sw.Conf)
+	if err != nil {
+		return
+	}
+	err = os.WriteFile(p, b, 0644)
+	return
+}
+
 // WriteConfig (re-)writes the yaml file for a Service's configuration
 // to the given folder.  The filename will be s.Name lower-cased, with ".yml"
 // appended.  For an instantiated Service, config will not be written unless
