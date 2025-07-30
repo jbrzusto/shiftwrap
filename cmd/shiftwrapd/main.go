@@ -134,13 +134,23 @@ func HandleTimer(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func checkContentType(w http.ResponseWriter, r *http.Request) bool {
+	if len(r.Header["Content-Type"]) == 0 || r.Header["Content-Type"][0] != "application/json" {
+		HTErr(w, "missing or invalid Content-Type Header; must be application/json")
+		return false
+	}
+	return true
+}
+
 func HandleConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		b, _ := json.Marshal(SW.Conf)
 		SendResponse(b, w)
 	case http.MethodPut:
-		fallthrough
+		if !checkContentType(w, r) {
+			return
+		}
 	default:
 		HTErr(w, "not implemented")
 	}
@@ -197,6 +207,9 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 		SW.DropService(sn)
 		HTOkay(w)
 	case http.MethodPut:
+		if !checkContentType(w, r) {
+			return
+		}
 		// note whether service existed; this will affect whether it has to go through
 		// an UnManage / Manage cycle, to delete stale state
 		serviceExisted := true
@@ -211,147 +224,140 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 		}
 		setManaged := false
 		willManage := false
-		if len(r.Header["Content-Type"]) > 0 {
-			errmsg := ""
-			ctype := r.Header["Content-Type"][0]
-			if ctype != "application/json" {
-				HTErr(w, "invalid Content-Type: %s", ctype)
-				return
+		var (
+			errmsg = ""
+			buf    []byte
+			err    error
+		)
+		buf, err = io.ReadAll(r.Body)
+		if err != nil {
+			HTErr(w, "bad or missing settings payload: %s", err.Error())
+			return
+		}
+		tmps := map[string]any{}
+		if err = json.Unmarshal(buf, &tmps); err != nil {
+			HTErr(w, "unable to parse JSON service payload: %s", err.Error())
+			return
+		}
+		if v, have := tmps["IsManaged"]; have {
+			if vb, ok := v.(bool); ok {
+				setManaged = true
+				willManage = vb
+			} else {
+				errmsg += "IsManaged must be a boolean; "
 			}
-			var (
-				buf []byte
-				err error
-			)
-			buf, err = io.ReadAll(r.Body)
-			if err != nil {
-				HTErr(w, "bad or missing settings payload: %s", err.Error())
-				return
+			delete(tmps, "IsManaged")
+		}
+		if v, have := tmps["IsSystemd"]; have {
+			if vb, ok := v.(bool); ok {
+				s.IsSystemd = vb
+			} else {
+				errmsg += "IsSystemd must be a boolean; "
 			}
-			tmps := map[string]any{}
-			if err = json.Unmarshal(buf, &tmps); err != nil {
-				HTErr(w, "unable to parse JSON service payload: %s", err.Error())
-				return
-			}
-			if v, have := tmps["IsManaged"]; have {
-				if vb, ok := v.(bool); ok {
-					setManaged = true
-					willManage = vb
+			delete(tmps, "IsSystemd")
+		}
+		if v, have := tmps["MinRuntime"]; have {
+			if vs, ok := v.(string); ok {
+				if mr, err := time.ParseDuration(vs); err == nil {
+					s.MinRuntime = shiftwrap.TidyDuration(mr)
 				} else {
-					errmsg += "IsManaged must be a boolean; "
+					errmsg += "MinRuntime failed to parse as a time.Duration: " + err.Error()
 				}
-				delete(tmps, "IsManaged")
+			} else {
+				errmsg += "MinRuntime must be a string representing a time.Duration; "
 			}
-			if v, have := tmps["IsSystemd"]; have {
-				if vb, ok := v.(bool); ok {
-					s.IsSystemd = vb
-				} else {
-					errmsg += "IsSystemd must be a boolean; "
-				}
-				delete(tmps, "IsSystemd")
-			}
-			if v, have := tmps["MinRuntime"]; have {
-				if vs, ok := v.(string); ok {
-					if mr, err := time.ParseDuration(vs); err == nil {
-						s.MinRuntime = shiftwrap.TidyDuration(mr)
-					} else {
-						errmsg += "MinRuntime failed to parse as a time.Duration: " + err.Error()
-					}
-				} else {
-					errmsg += "MinRuntime must be a string representing a time.Duration; "
-				}
-				delete(tmps, "MinRuntime")
-			}
-			if v, have := tmps["Shifts"]; have {
-				if vs, ok := v.(map[string]any); ok {
-					if len(vs) > 0 {
-						for n, sh := range vs {
-							if shm, ok := sh.(map[string]any); !ok {
-								errmsg += "Shift " + n + " must be an object; "
+			delete(tmps, "MinRuntime")
+		}
+		if v, have := tmps["Shifts"]; have {
+			if vs, ok := v.(map[string]any); ok {
+				if len(vs) > 0 {
+					for n, sh := range vs {
+						if shm, ok := sh.(map[string]any); !ok {
+							errmsg += "Shift " + n + " must be an object; "
+						} else {
+							tmpsh := &shiftwrap.Shift{}
+							if lab, ok := shm["Label"].(string); ok && lab == "" {
+								errmsg += "Label for shift " + n + " must be a non-empty string; "
 							} else {
-								tmpsh := &shiftwrap.Shift{}
-								if lab, ok := shm["Label"].(string); ok && lab == "" {
-									errmsg += "Label for shift " + n + " must be a non-empty string; "
+								if ok {
+									tmpsh.Label = lab
 								} else {
-									if ok {
-										tmpsh.Label = lab
-									} else {
-										tmpsh.Label = n
-									}
+									tmpsh.Label = n
 								}
-								if start, ok := shm["Start"].(string); start == "" || !ok {
-									errmsg += "Start for shift " + n + " must be a string; "
+							}
+							if start, ok := shm["Start"].(string); start == "" || !ok {
+								errmsg += "Start for shift " + n + " must be a string; "
+							} else {
+								if sts, err := shiftwrap.ParseTimeSpec(start); err != nil {
+									errmsg += "Start for shift " + n + "failed to parse as a timespec: " + err.Error()
 								} else {
-									if sts, err := shiftwrap.ParseTimeSpec(start); err != nil {
-										errmsg += "Start for shift " + n + "failed to parse as a timespec: " + err.Error()
-									} else {
-										tmpsh.Start = &sts
-									}
+									tmpsh.Start = &sts
 								}
-								if stop, ok := shm["Stop"].(string); stop == "" || !ok {
-									errmsg += "Stop for shift " + n + " must be a string; "
+							}
+							if stop, ok := shm["Stop"].(string); stop == "" || !ok {
+								errmsg += "Stop for shift " + n + " must be a string; "
+							} else {
+								if sts, err := shiftwrap.ParseTimeSpec(stop); err != nil {
+									errmsg += "Stop for shift " + n + "failed to parse as a timespec: " + err.Error()
 								} else {
-									if sts, err := shiftwrap.ParseTimeSpec(stop); err != nil {
-										errmsg += "Stop for shift " + n + "failed to parse as a timespec: " + err.Error()
-									} else {
-										tmpsh.Stop = &sts
-									}
+									tmpsh.Stop = &sts
 								}
-								if v, have := shm["StopBeforeStart"]; have {
-									if sbs, ok := v.(bool); !ok {
-										errmsg += "StopBeforeStart for shift " + n + " must be a bool; "
-									} else {
-										tmpsh.StopBeforeStart = sbs
-									}
+							}
+							if v, have := shm["StopBeforeStart"]; have {
+								if sbs, ok := v.(bool); !ok {
+									errmsg += "StopBeforeStart for shift " + n + " must be a bool; "
+								} else {
+									tmpsh.StopBeforeStart = sbs
 								}
-								if v, have := shm["Setup"]; have {
-									if setup, ok := v.(string); !ok {
-										errmsg += "Setup for shift " + n + " must be a string; "
-									} else {
-										tmpsh.Setup = setup
-									}
+							}
+							if v, have := shm["Setup"]; have {
+								if setup, ok := v.(string); !ok {
+									errmsg += "Setup for shift " + n + " must be a string; "
+								} else {
+									tmpsh.Setup = setup
 								}
-								if v, have := shm["Takedown"]; have {
-									if takedown, ok := v.(string); !ok {
-										errmsg += "Takedown for shift " + n + " must be a string; "
-									} else {
-										tmpsh.Takedown = takedown
-									}
+							}
+							if v, have := shm["Takedown"]; have {
+								if takedown, ok := v.(string); !ok {
+									errmsg += "Takedown for shift " + n + " must be a string; "
+								} else {
+									tmpsh.Takedown = takedown
 								}
-								if errmsg == "" {
-									SW.AddShifts(s, tmpsh)
-								}
+							}
+							if errmsg == "" {
+								SW.AddShifts(s, tmpsh)
 							}
 						}
 					}
-				} else {
-					errmsg += "Shifts must be an array of named shifts; "
 				}
-				delete(tmps, "Shifts")
+			} else {
+				errmsg += "Shifts must be an array of named shifts; "
 			}
-			if len(tmps) > 0 {
-				errmsg += "unknown fields:"
-				for k := range tmps {
-					errmsg += " " + k
-				}
+			delete(tmps, "Shifts")
+		}
+		if len(tmps) > 0 {
+			errmsg += "unknown fields:"
+			for k := range tmps {
+				errmsg += " " + k
 			}
-			if errmsg != "" {
-				HTErr(w, "errors in PUT Service: `%s`", errmsg)
-				return
+		}
+		if errmsg != "" {
+			HTErr(w, "errors in PUT Service: `%s`", errmsg)
+			return
+		}
+		if serviceExisted && s.IsManaged {
+			// service was being managed, so clear shift-changes for the service
+			// because new parameters may have invalidated them.
+			SW.ManageService(s, false)
+			if !setManaged {
+				// setManaged was not explicitly specified, so management should
+				// continue.  This happens in the `if` below.
+				setManaged = true
+				willManage = true
 			}
-			if serviceExisted && s.IsManaged {
-				// service was being managed, so clear shift-changes for the service
-				// because new parameters may have invalidated them.
-				SW.ManageService(s, false)
-				if !setManaged {
-					// setManaged was not explicitly specified, so management should
-					// continue.  This happens in the `if` below.
-					setManaged = true
-					willManage = true
-				}
-			}
-			if setManaged {
-				SW.ManageService(s, willManage)
-			}
+		}
+		if setManaged {
+			SW.ManageService(s, willManage)
 		}
 		if err := SW.WriteConfig(s, serviceConfDir); err != nil {
 			log.Printf("error (re-)writing config for service %s: %s", s.Name, err.Error())
