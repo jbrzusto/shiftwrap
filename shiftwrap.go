@@ -1225,27 +1225,26 @@ func (td TidyDuration) MarshalYAML() (value any, err error) {
 
 // UnMarshalJSON parses a TidyDuration from JSON
 func (td *TidyDuration) UnmarshalJSON(value []byte) (err error) {
-	var d time.Duration
 	if len(value) < 2 || value[0] != '"' || value[len(value)-1] != '"' {
 		err = fmt.Errorf("error: time duration value must be a string; e.g. \"5m\"")
 		return
 	}
-	d, err = time.ParseDuration(string(value[1 : len(value)-1]))
-	if err != nil {
-		return
-	}
-	*td = TidyDuration(d)
+	*td, err = ParseTidyDuration(string(value[1 : len(value)-1]))
 	return
 }
 
-// UnMarshalJSON parses a TidyDuration yaml
+// UnMarshalYAML parses a TidyDuration from yaml
 func (td *TidyDuration) UnmarshalYAML(value *yaml.Node) (err error) {
+	*td, err = ParseTidyDuration(value.Value)
+	return
+}
+
+// ParseTidyDuration parses a TidyDuration from a string
+func ParseTidyDuration(s string) (rv TidyDuration, err error) {
 	var d time.Duration
-	d, err = time.ParseDuration(value.Value)
-	if err != nil {
-		return
+	if d, err = time.ParseDuration(s); err == nil {
+		rv = TidyDuration(d)
 	}
-	*td = TidyDuration(d)
 	return
 }
 
