@@ -173,6 +173,23 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 		if tmps == nil {
 			return
 		}
+		if v, have := tmps["IsManaged"]; have {
+			if vb, ok := v.(bool); ok {
+				setManaged = true
+				willManage = vb
+			} else {
+				errmsg += "IsManaged must be a boolean; "
+			}
+			delete(tmps, "IsManaged")
+		}
+		if v, have := tmps["IsSystemd"]; have {
+			if vb, ok := v.(bool); ok {
+				s.IsSystemd = vb
+			} else {
+				errmsg += "IsSystemd must be a boolean; "
+			}
+			delete(tmps, "IsSystemd")
+		}
 	default:
 		HTErr(w, "not implemented")
 	}
