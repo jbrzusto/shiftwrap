@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -9,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/errors"
 	"path"
 	"strings"
 	"time"
@@ -189,6 +189,7 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		errmsg := ""
+		// flag indicating we need to remove then re-add all services, so schedules get recalculated
 		needRestart := false
 		if v, have := tmps["Shell"]; have {
 			if vs, ok := v.(string); ok {
@@ -204,14 +205,140 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			delete(tmps, "Shell")
 		}
-		if v, have := tmps["IsSystemd"]; have {
-			if vb, ok := v.(bool); ok {
-				s.IsSystemd = vb
+		if v, have := tmps["DefaultMinRuntime"]; have {
+			if vs, ok := v.(string); ok {
+				val, err := shiftwrap.ParseTidyDuration(vs)
+				if err != nil {
+					errmsg += "'DefaultMinRuntime' failed to parse: " + err.Error() + "; "
+				} else {
+					SW.Conf.DefaultMinRuntime = val
+				}
 			} else {
-				errmsg += "IsSystemd must be a boolean; "
+				errmsg += "'DefaultMinRuntime' must be a string; "
 			}
-			delete(tmps, "IsSystemd")
+			delete(tmps, "DefaultMinRuntime")
 		}
+		if v, have := tmps["IdleHandlerCommand"]; have {
+			if vs, ok := v.(string); ok {
+				SW.Conf.IdleHandlerCommand = vs
+			} else {
+				errmsg += "'IdleHandlerCommand' must be a string; "
+			}
+			delete(tmps, "IdleHandlerCommand")
+		}
+		if v, have := tmps["IdleHandlerInitialDelay"]; have {
+			if vs, ok := v.(string); ok {
+				val, err := shiftwrap.ParseTidyDuration(vs)
+				if err != nil {
+					errmsg += "'IdleHandlerInitialDelay' failed to parse: " + err.Error() + "; "
+				} else {
+					SW.Conf.IdleHandlerInitialDelay = val
+				}
+			} else {
+				errmsg += "'IdleHandlerInitialDelay' must be a string; "
+			}
+			delete(tmps, "IdleHandlerInitialDelay")
+		}
+		if v, have := tmps["IdleHandlerMinRuntime"]; have {
+			if vs, ok := v.(string); ok {
+				val, err := shiftwrap.ParseTidyDuration(vs)
+				if err != nil {
+					errmsg += "'IdleHandlerMinRuntime' failed to parse: " + err.Error() + "; "
+				} else {
+					SW.Conf.IdleHandlerMinRuntime = val
+				}
+			} else {
+				errmsg += "'IdleHandlerMinRuntime' must be a string; "
+			}
+			delete(tmps, "IdleHandlerMinRuntime")
+		}
+
+		if _, have := tmps["ServerAddress"]; have {
+			errmsg += "'ServerAddress' can't be set via the API; "
+			delete(tmps, "ServerAddress")
+		}
+
+		if v, have := tmps["LocationName"]; have {
+			if vs, ok := v.(string); ok {
+				if loc, err := time.LoadLocation(vs); err == nil {
+					SW.Conf.LocationName = vs
+					SW.Conf.Observer.Location = loc
+				} else {
+					errmsg += "'LocationName' is not a valid timezone: " + err.Error() + "; "
+				}
+			} else {
+				errmsg += "'LocationName' must be a string; "
+			}
+			delete(tmps, "LocationName")
+		}
+		if v, have := tmps["PrependPath"]; have {
+			if vs, ok := v.(string); ok {
+				info, err := os.Stat(vs)
+				if errors.Is(err, fs.ErrNotExist) || !info.IsDir() {
+					errmsg += "'PrependPath' is not a path to an existing directory; "
+				} else {
+					SW.Conf.PrependPath = vs
+				}
+			} else {
+				errmsg += "'PrependPath' must be a string; "
+			}
+			delete(tmps, "PrependPath")
+		}
+		if v, have := tmps["Observer"]; have {
+			if vs, ok := v.(map[string]any); ok {
+				if v, have := vs["Latitude"]; have {
+					if val, okay := v.(float64); okay {
+						SW.Conf.Observer.Latitude = val
+					} else if val, okay := v.(int); okay {
+						SW.Conf.Observer.Latitude = float64(val)
+					} else {
+						errmsg += "'Observer.Latitude' must be a number"
+					}
+					delete(vs, "Latitude")
+				}
+				if v, have := vs["Longitude"]; have {
+					if val, okay := v.(float64); okay {
+						SW.Conf.Observer.Longitude = val
+					} else if val, okay := v.(int); okay {
+						SW.Conf.Observer.Longitude = float64(val)
+					} else {
+						errmsg += "'Observer.Longitude' must be a number"
+					}
+					delete(vs, "Longitude")
+				}
+				if v, have := vs["Height"]; have {
+					if val, okay := v.(float64); okay {
+						SW.Conf.Observer.Height = val
+					} else if val, okay := v.(int); okay {
+						SW.Conf.Observer.Height = float64(val)
+					} else {
+						errmsg += "'Observer.Height' must be a number"
+					}
+					delete(vs, "Height")
+				}
+				if v, have := vs["Altitude"]; have {
+					// allow this alias for "Height"
+					if val, okay := v.(float64); okay {
+						SW.Conf.Observer.Height = val
+					} else if val, okay := v.(int); okay {
+						SW.Conf.Observer.Height = float64(val)
+					} else {
+						errmsg += "'Observer.Altitude' must be a number"
+					}
+					delete(vs, "Altitude")
+				}
+				if len(vs) > 0 {
+					errmsg += "unknown fields:"
+					for k := range vs {
+						errmsg += " " + k
+					}
+				}
+			} else {
+				errmsg += "'Observer' must be an object; "
+			}
+			delete(tmps, "Observer")
+		}
+
 		if len(tmps) > 0 {
 			errmsg += "unknown fields:"
 			for k := range tmps {
@@ -221,6 +348,9 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 		if errmsg != "" {
 			HTErr(w, "errors in PUT Config: `%s`", errmsg)
 			return
+		}
+		if needRestart {
+			// do the restart stuff.
 		}
 	default:
 		HTErr(w, "not implemented")
