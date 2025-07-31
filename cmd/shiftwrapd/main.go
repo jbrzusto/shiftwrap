@@ -204,6 +204,7 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 				errmsg += "'Shell' must be a string; "
 			}
 			delete(tmps, "Shell")
+			// no restart needed
 		}
 		if v, have := tmps["DefaultMinRuntime"]; have {
 			if vs, ok := v.(string); ok {
@@ -217,6 +218,7 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 				errmsg += "'DefaultMinRuntime' must be a string; "
 			}
 			delete(tmps, "DefaultMinRuntime")
+			needRestart = true // might affect removal of short shifts, if Service doesn't specify
 		}
 		if v, have := tmps["IdleHandlerCommand"]; have {
 			if vs, ok := v.(string); ok {
@@ -225,6 +227,7 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 				errmsg += "'IdleHandlerCommand' must be a string; "
 			}
 			delete(tmps, "IdleHandlerCommand")
+			// no restart needed
 		}
 		if v, have := tmps["IdleHandlerInitialDelay"]; have {
 			if vs, ok := v.(string); ok {
@@ -238,6 +241,7 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 				errmsg += "'IdleHandlerInitialDelay' must be a string; "
 			}
 			delete(tmps, "IdleHandlerInitialDelay")
+			// no restart needed
 		}
 		if v, have := tmps["IdleHandlerMinRuntime"]; have {
 			if vs, ok := v.(string); ok {
@@ -251,6 +255,7 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 				errmsg += "'IdleHandlerMinRuntime' must be a string; "
 			}
 			delete(tmps, "IdleHandlerMinRuntime")
+			// no restart needed
 		}
 
 		if _, have := tmps["ServerAddress"]; have {
@@ -261,8 +266,11 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 		if v, have := tmps["LocationName"]; have {
 			if vs, ok := v.(string); ok {
 				if loc, err := time.LoadLocation(vs); err == nil {
-					SW.Conf.LocationName = vs
-					SW.Conf.Observer.Location = loc
+					if vs != SW.Conf.LocationName {
+						SW.Conf.LocationName = vs
+						SW.Conf.Observer.Location = loc
+						needRestart = true
+					}
 				} else {
 					errmsg += "'LocationName' is not a valid timezone: " + err.Error() + "; "
 				}
@@ -283,14 +291,21 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 				errmsg += "'PrependPath' must be a string; "
 			}
 			delete(tmps, "PrependPath")
+			// no restart needed
 		}
 		if v, have := tmps["Observer"]; have {
 			if vs, ok := v.(map[string]any); ok {
 				if v, have := vs["Latitude"]; have {
 					if val, okay := v.(float64); okay {
-						SW.Conf.Observer.Latitude = val
+						if SW.Conf.Observer.Latitude != val {
+							SW.Conf.Observer.Latitude = val
+							needRestart = true
+						}
 					} else if val, okay := v.(int); okay {
-						SW.Conf.Observer.Latitude = float64(val)
+						if SW.Conf.Observer.Latitude != float64(val) {
+							SW.Conf.Observer.Latitude = float64(val)
+							needRestart = true
+						}
 					} else {
 						errmsg += "'Observer.Latitude' must be a number"
 					}
@@ -298,9 +313,15 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 				}
 				if v, have := vs["Longitude"]; have {
 					if val, okay := v.(float64); okay {
-						SW.Conf.Observer.Longitude = val
+						if SW.Conf.Observer.Longitude != val {
+							SW.Conf.Observer.Longitude = val
+							needRestart = true
+						}
 					} else if val, okay := v.(int); okay {
-						SW.Conf.Observer.Longitude = float64(val)
+						if SW.Conf.Observer.Longitude != float64(val) {
+							SW.Conf.Observer.Longitude = float64(val)
+							needRestart = true
+						}
 					} else {
 						errmsg += "'Observer.Longitude' must be a number"
 					}
@@ -308,20 +329,31 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 				}
 				if v, have := vs["Height"]; have {
 					if val, okay := v.(float64); okay {
-						SW.Conf.Observer.Height = val
+						if SW.Conf.Observer.Height != val {
+							SW.Conf.Observer.Height = val
+							needRestart = true
+						}
 					} else if val, okay := v.(int); okay {
-						SW.Conf.Observer.Height = float64(val)
+						if SW.Conf.Observer.Height != float64(val) {
+							SW.Conf.Observer.Height = float64(val)
+							needRestart = true
+						}
 					} else {
 						errmsg += "'Observer.Height' must be a number"
 					}
 					delete(vs, "Height")
 				}
 				if v, have := vs["Altitude"]; have {
-					// allow this alias for "Height"
 					if val, okay := v.(float64); okay {
-						SW.Conf.Observer.Height = val
+						if SW.Conf.Observer.Height != val {
+							SW.Conf.Observer.Height = val
+							needRestart = true
+						}
 					} else if val, okay := v.(int); okay {
-						SW.Conf.Observer.Height = float64(val)
+						if SW.Conf.Observer.Height != float64(val) {
+							SW.Conf.Observer.Height = float64(val)
+							needRestart = true
+						}
 					} else {
 						errmsg += "'Observer.Altitude' must be a number"
 					}
@@ -345,12 +377,12 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 				errmsg += " " + k
 			}
 		}
+		if needRestart {
+			SW.Restart()
+		}
 		if errmsg != "" {
 			HTErr(w, "errors in PUT Config: `%s`", errmsg)
 			return
-		}
-		if needRestart {
-			// do the restart stuff.
 		}
 	default:
 		HTErr(w, "not implemented")
