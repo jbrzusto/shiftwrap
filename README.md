@@ -403,8 +403,11 @@ Here's the API:
 /config
 `
 
-- **GET**: Return the shiftwrapd configuration.  These are items whose defaults are read from `shiftwrap.xml` at startup.
-- **PUT**:
+- **GET**: Return the shiftwrapd configuration.  These are items whose
+  defaults are read from `shiftwrap.xml` at startup.
+- **PUT**: Modify shiftwrapd configuration.  Shift changes will be
+  recalculated immediately, which might cause some services to be
+  started or stopped.
 
 `
 /time
