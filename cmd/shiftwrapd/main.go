@@ -89,6 +89,19 @@ func main() {
 	http.HandleFunc("/service/{sn}/shiftchanges", HandleShiftChanges)
 	http.HandleFunc("/service/{sn}/shiftchanges/{date}/raw", HandleShiftChangesDateRaw)
 	http.HandleFunc("/service/{sn}/shiftchanges/{date}", HandleShiftChangesDate)
+	go func() {
+		// sleep for 0.25 s to allow http server to start, then
+		// create the symlink giving the http port
+		portLink := os.Getenv("SHIFTWRAPD_PORT_LINK")
+		if portLink != "" {
+			_, port, found := strings.Cut(httpAddr, ":")
+			if found {
+				os.Remove(portLink)
+				time.Sleep(250 * time.Millisecond)
+				os.Symlink(portLink, port)
+			}
+		}
+	}()
 	http.ListenAndServe(httpAddr, nil)
 }
 

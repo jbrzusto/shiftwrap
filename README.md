@@ -408,6 +408,8 @@ Here's the API:
 - **PUT**: Modify shiftwrapd configuration.  Shift changes will be
   recalculated immediately, which might cause some services to be
   started or stopped.
+  **Note**: the `ServerAddress` field can't be set via an API call.
+
 
 `
 /time

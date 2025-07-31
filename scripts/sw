@@ -4,8 +4,24 @@
 #
 # This script doesn't cover the entire API, just some of the most common uses.
 
-## server config
-SERVER=http://localhost:$((0x7ac0))
+## server config - and wait until server is ready
+
+SERVER_PORT_SYMLINK=/var/run/shiftwrapd.port
+SERVER_WAIT_TIME=30
+i=0
+while true; do
+    if [[ -L $SERVER_PORT_SYMLINK ]]; then
+	break
+    fi
+    if [[ $i == SERVER_WAIT_TIME ]]; then
+	echo "server isn't running - waited for $SERVER_WAIT_TIME seconds"
+	exit 1
+    fi
+    i=$(( $i + 1 ))
+    sleep 1
+done
+
+SERVER=http://localhost:`readlink $SERVER_PORT_SYMLINK`
 FETCH="/usr/bin/curl --silent"
 
 ## pretty-printer for responses from shiftwrapd HTTP server
