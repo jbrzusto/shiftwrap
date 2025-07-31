@@ -5,9 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"os/errors"
 	"path"
 	"strings"
 	"time"
@@ -173,14 +175,21 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 		if tmps == nil {
 			return
 		}
-		if v, have := tmps["IsManaged"]; have {
-			if vb, ok := v.(bool); ok {
-				setManaged = true
-				willManage = vb
+		errmsg := ""
+		needRestart := false
+		if v, have := tmps["Shell"]; have {
+			if vs, ok := v.(string); ok {
+				_, err := os.Stat(vs)
+				if errors.Is(err, fs.ErrNotExist) {
+					errmsg += "'Shell' is not a path to an existing file; "
+				} else {
+					// TODO? more sanity checking
+					SW.Conf.Shell = vs
+				}
 			} else {
-				errmsg += "IsManaged must be a boolean; "
+				errmsg += "'Shell' must be a string; "
 			}
-			delete(tmps, "IsManaged")
+			delete(tmps, "Shell")
 		}
 		if v, have := tmps["IsSystemd"]; have {
 			if vb, ok := v.(bool); ok {
@@ -189,6 +198,16 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 				errmsg += "IsSystemd must be a boolean; "
 			}
 			delete(tmps, "IsSystemd")
+		}
+		if len(tmps) > 0 {
+			errmsg += "unknown fields:"
+			for k := range tmps {
+				errmsg += " " + k
+			}
+		}
+		if errmsg != "" {
+			HTErr(w, "errors in PUT Config: `%s`", errmsg)
+			return
 		}
 	default:
 		HTErr(w, "not implemented")
