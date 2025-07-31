@@ -1,6 +1,7 @@
 package shiftwrap
 
 import (
+	"log"
 	"os"
 	"time"
 
@@ -81,6 +82,7 @@ type Config struct {
 	Observer suncalc.Observer `yaml:"observer" json:"observer"`
 
 	// LocationName is the name of the timezone for the Observer
+	// If empty, defaults to the system timezone.
 	LocationName string `yaml:"location" json:"location"`
 
 	// PrependPath is a path string which is prepended to the default path
@@ -101,7 +103,14 @@ func (c *Config) Parse(buf []byte) (err error) {
 	if err = yaml.Unmarshal(buf, c); err != nil {
 		return
 	}
-	c.Observer.Location, err = time.LoadLocation(c.LocationName)
+	if c.LocationName != "" {
+		if c.Observer.Location, err = time.LoadLocation(c.LocationName); err != nil {
+			log.Printf("error parsing LocationName: %s; using system timezone instead", err.Error())
+		}
+	}
+	if c.Observer.Location == nil {
+		c.Observer.Location = time.Local
+	}
 	if c.PrependPath != "" {
 		os.Setenv("PATH", c.PrependPath+":"+os.Getenv("PATH"))
 	}
