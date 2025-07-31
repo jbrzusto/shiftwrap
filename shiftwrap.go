@@ -269,6 +269,21 @@ func (sw *ShiftWrap) ServiceShiftChanges(s *Service, d time.Time, raw bool) (rv 
 	return
 }
 
+// Restart clears the queue and causes all Services to have their
+// ShiftChanges recalculated.
+func (sw *ShiftWrap) Restart() {
+	hold := make([]*Service, len(sw.services))
+	for _, s := range sw.services {
+		hold = append(hold, s)
+	}
+	for _, s := range hold {
+		sw.DropService(s.Name)
+	}
+	for _, s := range hold {
+		sw.AddService(s)
+	}
+}
+
 // Parse decodes a yaml representation of a Service,
 // filling in the Shift.Label fields
 func (s *Service) Parse(buf []byte) (err error) {
