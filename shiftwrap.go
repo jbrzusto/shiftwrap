@@ -684,9 +684,9 @@ func (sw *ShiftWrap) AddService(s *Service) (err error) {
 	}
 	sw.services[s.Name] = s
 	s.shiftwrap = sw
-	if s.MinRuntime == 0 {
-		s.MinRuntime = TidyDuration(sw.Conf.DefaultMinRuntime)
-	}
+	// if s.MinRuntime == 0 {
+	// 	s.MinRuntime = TidyDuration(sw.Conf.DefaultMinRuntime)
+	// }
 	if s.Shifts == nil {
 		s.Shifts = map[string]*Shift{}
 	}
