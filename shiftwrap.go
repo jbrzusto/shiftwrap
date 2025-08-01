@@ -173,6 +173,7 @@ type SchedMsgType int
 const (
 	SMManageService SchedMsgType = iota + 1
 	SMUnmanageService
+	SMRestart
 	SMQuit
 	SMConfirm
 )
@@ -269,25 +270,11 @@ func (sw *ShiftWrap) ServiceShiftChanges(s *Service, d time.Time, raw bool) (rv 
 	return
 }
 
-// Restart clears the queue and causes all Services to have their
+// Restart clears the queue and causes all Managed Services to have their
 // ShiftChanges recalculated.
 func (sw *ShiftWrap) Restart() {
-	hold := make([]*Service, len(sw.services))
-	i := 0
-	for _, s := range sw.services {
-		hold[i] = s
-		i++
-	}
-	for n, s := range hold {
-		if s == nil {
-			log.Printf("weird: service named '%s' is nil\n", n)
-			continue
-		}
-		sw.DropService(s.Name)
-	}
-	for _, s := range hold {
-		sw.AddService(s)
-	}
+	sw.schedChan <- SchedMsg{Type: SMRestart}
+	<-sw.schedChan
 }
 
 // Parse decodes a yaml representation of a Service,
@@ -1306,6 +1293,10 @@ func (sw *ShiftWrap) Scheduler() {
 			case SMUnmanageService:
 				sw.doUnmanageService(msg.Service)
 				sw.schedChan <- confmsg
+
+			case SMRestart:
+				sw.doRestart()
+				sw.schedChan <- confmsg
 			}
 		}
 		next := sw.doEnsureTimer()
@@ -1472,6 +1463,7 @@ func (sw *ShiftWrap) advanceShiftChange(s *Service, now time.Time, sc ShiftChang
 // (because management is starting during a shift) or already not
 // running (because management is starting outside of any shifts),
 // and starts/stops Service accordingly.
+// This method is only called from the Scheduler goroutine
 func (sw *ShiftWrap) doManageService(s *Service) {
 	// calculate shift changes for this service and add to heap
 	if s.IsManaged {
@@ -1529,9 +1521,23 @@ func (sw *ShiftWrap) doManageService(s *Service) {
 
 }
 
+// doUnmanageService removes a service from management by shiftwrap.
+// This method is only called by the Scheduler goroutine.
 func (sw *ShiftWrap) doUnmanageService(s *Service) {
 	sw.scQueue.Remove(s)
 	s.IsManaged = false
 	s.shiftChanges = s.shiftChanges[0:0]
 	sw.NumManagedServices--
+}
+
+// doRestart recalculates schedules for all services, typically in
+// response to change in a global parameter.
+// This method is only called by the Scheduler goroutine.
+func (sw *ShiftWrap) doRestart() {
+	for _, s := range sw.services {
+		if s.IsManaged {
+			sw.doUnmanageService(s)
+			sw.doManageService(s)
+		}
+	}
 }
