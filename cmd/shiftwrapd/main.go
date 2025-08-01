@@ -381,9 +381,15 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 			SW.Restart()
 		}
 		if errmsg != "" {
-			HTErr(w, "errors in PUT Config: `%s`", errmsg)
+			HTErr(w, "errors in PUT Config: %s", errmsg)
 			return
 		}
+		err := SW.WriteGlobalConfig(confDir)
+		if err != nil {
+			HTErr(w, "error rewriting shiftwrap.yml configuration: "+err.Error())
+			return
+		}
+		HTOkay(w)
 	default:
 		HTErr(w, "not implemented")
 	}
