@@ -769,14 +769,14 @@ func (sw *ShiftWrap) CalculateShiftChanges(s *Service, t time.Time) (rv time.Tim
 
 // NextShiftChange returns the index of the first ShiftChange in sc at or after
 // t, or -1 if there is no such ShiftChange (i.e. if all ShiftChanges in sc are before
-// t).
-func NextShiftChange(t time.Time, scs ShiftChanges) (rv int) {
+// t).  Also, the shiftchange must not have the same IsStart flag as the given shift change
+func NextShiftChange(t time.Time, scs ShiftChanges, sc ShiftChange) (rv int) {
 	if len(scs) == 0 {
 		return -1
 	}
 	rv = sort.Search(len(scs),
 		func(i int) bool {
-			return !scs[i].At.Before(t)
+			return !scs[i].At.Before(t) && (sc.IsZero() || scs[i].IsStart != sc.IsStart)
 		},
 	)
 	if rv == len(scs) {
@@ -1449,7 +1449,7 @@ func (sw *ShiftWrap) advanceShiftChange(s *Service, now time.Time, sc ShiftChang
 			if !sc.IsZero() {
 				useTime = sc.At
 			}
-			scn = NextShiftChange(useTime, s.shiftChanges)
+			scn = NextShiftChange(useTime, s.shiftChanges, sc)
 			if scn >= 0 {
 				// we have a valid next shift change so add it and subsequent ones to the heap
 				sw.scQueue.Add(s.shiftChanges[scn:]...)
