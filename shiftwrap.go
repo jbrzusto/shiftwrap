@@ -273,10 +273,16 @@ func (sw *ShiftWrap) ServiceShiftChanges(s *Service, d time.Time, raw bool) (rv 
 // ShiftChanges recalculated.
 func (sw *ShiftWrap) Restart() {
 	hold := make([]*Service, len(sw.services))
+	i := 0
 	for _, s := range sw.services {
-		hold = append(hold, s)
+		hold[i] = s
+		i++
 	}
-	for _, s := range hold {
+	for n, s := range hold {
+		if s == nil {
+			log.Printf("weird: service named '%s' is nil\n", n)
+			continue
+		}
 		sw.DropService(s.Name)
 	}
 	for _, s := range hold {
