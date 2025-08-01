@@ -98,7 +98,7 @@ func main() {
 			if found {
 				os.Remove(portLink)
 				time.Sleep(250 * time.Millisecond)
-				os.Symlink(portLink, port)
+				os.Symlink(port, portLink)
 			}
 		}
 	}()
