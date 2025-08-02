@@ -46,6 +46,17 @@ function config () {
     get config | $PP
 }
 
+# set (some) global config items
+function set_conf () {
+    case $1 in
+	lat) put config '{"Observer":{"Latitude":'$2'}}' ;;
+	long) put config '{"Observer":{"Longitude":'$2'}}' ;;
+	alt) put config  '{"Observer":{"Altitude":'$2'}}' ;;
+	minruntime) put config '{"DefaultMinRuntime":"'$2'"}' ;;
+    esac
+}
+
+
 # show time on shiftwrapd clock
 function get_time () {
     get time | $PP
@@ -203,6 +214,7 @@ shift
 
 case $ACTION in
     config ) config ;;
+    setconf ) set_conf $1 $2 ;;
     "time" ) get_time ;;
     manage ) manage_service $1 $2 ;;
     unmanage ) unmanage_service $1 $2 ;;
