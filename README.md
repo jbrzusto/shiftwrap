@@ -482,6 +482,21 @@ where `ACTION ARGS...` is one of the following phrases:
 
    - prints the global shiftwrap configuration
 
+`setconf KEY VALUE`
+
+   - sets one of the global shiftwrap options.  `KEY VALUE` can be:
+
+     - `lat LATITUDE`
+        sets the latitude of the station to LATITUDE decimal degrees (positive is North)
+
+     - `long LONGITUDE`
+	   sets the longitude of the station to LONGITUDE decimal degrees (positive is West)
+
+     - `minruntime DURATION`
+        sets the default minmum runtime for any Service that doesn't specify this.
+        Duration is parsed like a Go time.Duration; e.g. "15m", "1.5h", "30s"
+
+
 `time`
 
    - prints the current time according to the shiftwrapd clock,
