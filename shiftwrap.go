@@ -684,9 +684,6 @@ func (sw *ShiftWrap) AddService(s *Service) (err error) {
 	}
 	sw.services[s.Name] = s
 	s.shiftwrap = sw
-	// if s.MinRuntime == 0 {
-	// 	s.MinRuntime = TidyDuration(sw.Conf.DefaultMinRuntime)
-	// }
 	if s.Shifts == nil {
 		s.Shifts = map[string]*Shift{}
 	}
@@ -1250,6 +1247,9 @@ func (td *TidyDuration) UnmarshalYAML(value *yaml.Node) (err error) {
 // ParseTidyDuration parses a TidyDuration from a string
 func ParseTidyDuration(s string) (rv TidyDuration, err error) {
 	var d time.Duration
+	if s == "" {
+		return
+	}
 	if d, err = time.ParseDuration(s); err == nil {
 		rv = TidyDuration(d)
 	}
