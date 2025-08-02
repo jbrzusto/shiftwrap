@@ -1034,7 +1034,7 @@ func (sw *ShiftWrap) ReadConfig(confDir string) {
 // WriteGlobalConfig (re-)writes the yaml file for Shiftwrap configuration
 // to the specified dir.
 func (sw *ShiftWrap) WriteGlobalConfig(confDir string) (err error) {
-	p := path.Join(confDir, "shiftwrapd.yml")
+	p := path.Join(confDir, "shiftwrap.yml")
 	b, err := yaml.Marshal(sw.Conf)
 	if err != nil {
 		return
