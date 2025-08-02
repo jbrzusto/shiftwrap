@@ -486,15 +486,12 @@ where `ACTION ARGS...` is one of the following phrases:
 
    - sets one of the global shiftwrap options.  `KEY VALUE` can be:
 
-     - `lat LATITUDE`
-        sets the latitude of the station to LATITUDE decimal degrees (positive is North)
+     - `lat LATITUDE` : sets the latitude of the station to LATITUDE decimal degrees (positive is North)
 
-     - `long LONGITUDE`
-	   sets the longitude of the station to LONGITUDE decimal degrees (positive is West)
+     - `long LONGITUDE` : sets the longitude of the station to LONGITUDE decimal degrees (positive is West)
 
-     - `minruntime DURATION`
-        sets the default minmum runtime for any Service that doesn't specify this.
-        Duration is parsed like a Go time.Duration; e.g. "15m", "1.5h", "30s"
+     - `minruntime DURATION` : sets the default minmum runtime for any Service that doesn't specify this.
+        DURATION is parsed like a Go time.Duration; e.g. "15m", "1.5h", "30s"
 
 
 `time`
