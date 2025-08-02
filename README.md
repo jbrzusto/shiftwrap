@@ -490,6 +490,8 @@ where `ACTION ARGS...` is one of the following phrases:
 
      - `long LONGITUDE` : sets the longitude of the station to LONGITUDE decimal degrees (positive is West)
 
+	 - `alt ALTITUDE` : sets the altitude of the station to ALTITUDE metres ASL
+
      - `minruntime DURATION` : sets the default minmum runtime for any Service that doesn't specify this.
         DURATION is parsed like a Go time.Duration; e.g. "15m", "1.5h", "30s"
 
