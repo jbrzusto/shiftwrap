@@ -744,7 +744,7 @@ func (sw *ShiftWrap) CalculateShiftChanges(s *Service, t time.Time) (rv time.Tim
 	if t.IsZero() {
 		t = sw.Clock.Now()
 	}
-	s.shiftChanges = sw.ServiceShiftChanges(s, t, false)
+	s.shiftChanges = sw.ServiceShiftChanges(s, Noon(t), false)
 	s.shiftChangeIndex = -1
 	// log.Printf("shiftchanges for %s at %s: %v", s.Name, t.Format(time.DateTime), s.shiftChanges)
 	rv = t
@@ -919,6 +919,12 @@ func (sw *ShiftWrap) ClearSolarEventsCache() {
 // CopyTimeOnly copies the non-date portions of a time.Time to another time.Time
 func CopyTimeOnly(dst, src time.Time) time.Time {
 	return time.Date(dst.Year(), dst.Month(), dst.Day(), src.Hour(), src.Minute(), src.Second(), src.Nanosecond(), dst.Location())
+}
+
+// Noon returns a time.Time corresponding to noon of the
+// date given by t, in the same Location.
+func Noon(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 12, 0, 0, 0, t.Location())
 }
 
 // Time converts a TimeSpec to a time for the day given in t
@@ -1507,7 +1513,7 @@ func (sw *ShiftWrap) doManageService(s *Service) {
 		} else {
 			// no shift that overlaps today would have started Service,
 			// so look at yesterday's shiftChanges
-			scs := sw.ServiceShiftChanges(s, now.AddDate(0, 0, -1), false)
+			scs := sw.ServiceShiftChanges(s, Noon(now).AddDate(0, 0, -1), false)
 			// find the last Start shiftChange yesterday
 			for i := len(scs) - 1; i >= 0; i-- {
 				if scs[i].IsStart {
