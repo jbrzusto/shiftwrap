@@ -6,7 +6,7 @@
 
 ## server config - and wait until server is ready
 
-SERVER_PORT_SYMLINK=/var/run/shiftwrapd.port
+SERVER_PORT_SYMLINK=/tmp/shiftwrapd.port
 SERVER_WAIT_TIME=30
 i=0
 while true; do
@@ -21,7 +21,8 @@ while true; do
     sleep 1
 done
 
-SERVER=http://localhost:`readlink $SERVER_PORT_SYMLINK`
+SOCKPATH=`readlink $SERVER_PORT_SYMLINK`
+SERVER="--unix-socket $SOCKPATH http://localhost"
 FETCH="/usr/bin/curl --silent"
 
 ## pretty-printer for responses from shiftwrapd HTTP server

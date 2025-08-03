@@ -73,7 +73,7 @@ type Config struct {
 	// ShiftEvent.
 	IdleHandlerMinRuntime TidyDuration `yaml:"idle_handler_min_runtime" json:"idleHandlerMinRuntime"`
 
-	// ServerAddress is the IP:PORT address for the http server by which
+	// ServerAddress is the path to a named unix-domain socket for the http server by which
 	// shiftwrapd is controlled
 	ServerAddress string `yaml:"server_address" json:"serverAddress"`
 
@@ -96,7 +96,7 @@ var DefaultConfig = Config{
 	IdleHandlerCommand:      "echo would do sudo rtc_wake -m mem -s $SHIFTWRAP_IDLE_DURATION",
 	Shell:                   "/bin/bash",
 	DefaultMinRuntime:       TidyDuration(1 * time.Minute),
-	ServerAddress:           ":31424", // 0x7ac0
+	ServerAddress:           "/var/run/shiftwrapd.sock",
 }
 
 func (c *Config) Parse(buf []byte) (err error) {

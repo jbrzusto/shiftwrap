@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -22,6 +23,7 @@ const (
 	DefaultConfDir  = "/etc/shiftwrap"
 	ConfDirEnvVar   = "SHIFTWRAP_DIR"
 	DefaultHTTPHost = "localhost:31424"
+	DefaultSocket   = "/tmp/shiftwrap.sock"
 )
 
 var (
@@ -48,8 +50,8 @@ FLAGS:
 }
 
 func main() {
-	var httpAddr string
-	flag.StringVar(&httpAddr, "httpaddr", "", "address:port from which to operate HTTP server; empty means use value from shiftwrap.yml; if that too is empty, default is "+DefaultHTTPHost)
+	var sockName string
+	flag.StringVar(&sockName, "sock", "", "path to unix domain socket from which to operate HTTP server; empty means use value from shiftwrap.yml; if that too is empty, default is "+DefaultSocket)
 	flag.Float64Var(&clockDilationFactor, "clockdil", 1, "clock dilation factor; 1 = normal clock speed; 2 = double clock speed, etc.")
 	flag.StringVar(&clockEpochString, "clockepoch", "", "clock epoch as YYYY-MM-DD HH:MM; default (\"\") means 'now'.  If neither -clockepoch nor -clockdil are specified, shiftwrapd uses the standard system clock")
 	confDir = os.Getenv(ConfDirEnvVar)
@@ -73,12 +75,13 @@ func main() {
 	cl.SetUnsafe(true)
 	SW = shiftwrap.NewShiftWrapWithAClock(cl)
 	SW.ReadConfig(confDir)
-	if httpAddr == "" {
-		httpAddr = SW.Conf.ServerAddress
-		if httpAddr == "" {
-			httpAddr = DefaultHTTPHost
+	if sockName == "" {
+		sockName = SW.Conf.ServerAddress
+		if sockName == "" {
+			sockName = DefaultSocket
 		}
 	}
+	os.Remove(sockName)
 	SW.ReadConfig(serviceConfDir)
 	http.HandleFunc("/config", HandleConfig)
 	http.HandleFunc("/time", HandleTime)
@@ -94,15 +97,19 @@ func main() {
 		// create the symlink giving the http port
 		portLink := os.Getenv("SHIFTWRAPD_PORT_LINK")
 		if portLink != "" {
-			_, port, found := strings.Cut(httpAddr, ":")
-			if found {
-				os.Remove(portLink)
-				time.Sleep(250 * time.Millisecond)
-				os.Symlink(port, portLink)
+			os.Remove(portLink)
+			time.Sleep(250 * time.Millisecond)
+			if err := os.Symlink(sockName, portLink); err != nil {
+				log.Printf("error creating port link: %s", err.Error())
 			}
 		}
 	}()
-	http.ListenAndServe(httpAddr, nil)
+	listener, err := net.Listen("unix", sockName)
+	if err != nil {
+		log.Fatalf("unable to listen on unix socket %s: %s", sockName, err.Error())
+	}
+	srv := http.Server{}
+	srv.Serve(listener)
 }
 
 func HTErr(w http.ResponseWriter, msg string, v ...any) {

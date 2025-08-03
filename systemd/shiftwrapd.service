@@ -5,7 +5,7 @@ Description=shiftwrap daemon
 KillSignal=SIGINT
 # load path to credentials etc.
 Environment=SHIFTWRAP_DIR=/etc/shiftwrap
-Environment=SHIFTWRAPD_PORT_LINK=/var/run/shiftwrapd.port
+Environment=SHIFTWRAPD_PORT_LINK=/tmp/shiftwrapd.port
 # ideally, we would wait until we know the clock is valid, but then shiftwrapd might miss
 # API calls from udev rules, e.g. if hardware is detected which triggers starting a shiftwrap
 # service. So we don't do the following (but see https://github.com/jbrzusto/shiftwrap/issues/4 )
