@@ -325,10 +325,10 @@ shell: PATH_TO_SHELL
 The path to the shell used when running `Setup` and `Takedown` commands at the start and end of each shift.
 
 ```yaml
-server_address: HOST:PORT
+server_address: PATH_TO_SOCKET
 ```
 
-The address on which `shiftwrapd` listens for HTTP requests.  This can also be set by the `-httpaddr` flag for `shiftwrapd`, which overrides the value in the `shiftwrapd.yml`.  If neither of these is set, the default is `localhost:31424`.
+The path to the unix-domain socket on which `shiftwrapd` listens for HTTP requests.  This can also be set by the `-sock` flag for `shiftwrapd`, which overrides the value in the `shiftwrapd.yml`.  If neither of these is set, the default is `/var/run/shiftwrapd.sock`.
 
 ```yaml
 prepend_path: EXTRA_PATH
@@ -397,6 +397,11 @@ to start and stop the service.
 ## Shiftwrapd API
 Shiftwrapd runs an HTTP server to let you query and control it.
 Requests and responses are in JSON format (and so must have the HTTP header `Content-type: application/json`)
+To allow for basic security, the `shiftwrapd` HTTP server listens on a unix domain socket, `/var/run/shiftwrapd.sock` by default.
+This means only processes with root privileges can send requests.  If you want to run `shiftwrapd` with
+fewer privileges, you should choose a different location for the socket.  To help processes find the socket,
+`shiftwrapd` creates a symlink to the socket from `/tmp/shiftwrapd.port`.
+
 Here's the API:
 
 `
@@ -586,9 +591,9 @@ clock dilation factor; 1 = normal clock speed; 2 = double clock speed, etc. (def
 
 clock epoch as YYYY-MM-DD HH:MM; default ("") means 'now'.  If neither -clockepoch nor -clockdil are specified, shiftwrapd uses the standard system clock
 
-`-httpaddr string`
+`-sock path`
 
-address:port from which to operate HTTP server; disabled if empty (default ":31424" = TCP port 0x7ac0 on all interfaces)
+path to a socket where the HTTP server will listen (default `/var/run/shiftwrapd.sock`)
 
 ## The Idle Handler
 
