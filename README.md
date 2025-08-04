@@ -37,7 +37,7 @@ services.
 To control a shiftwrapped service, use `systemctl` commands, but with your
 service as the parameter to the `shiftwrap@` service template.  If
 your service is also instantiated, the instance name will have more than one `@`:  the
-first to separate `shiftwrap` from your service's instance name, the second
+first to separate `shiftwrap` from your service's instantiated name, the second
 to separate your service name from its instance name;  e.g. if you want shiftwrap to control the
 service `foo@tty0`, then use the service name `shiftwrap@foo@tty0` in
 the commands described below.
@@ -47,7 +47,7 @@ shiftwrap**, rather than your service itself.  When under shiftwrap's
 control, your service is started/stopped on its shift schedule; when
 not under shiftwrap's control, your service is started/stopped
 directly by systemd (or manually by you) according to the usual rules.
-When shiftwrap control is enabled for a service, that service is
+When shiftwrap control is *enabled* for a service, that service is
 placed under shiftwrap control after each reboot.
 
 ### Enabling shiftwrap control of your service
@@ -366,11 +366,6 @@ These fields configure the idle handler - see the [idle handler section below](#
   make the start time earlier to ensure service `X` starts when you want
   it to.
 
-For the `amcam` example above, the sunset is calculated today, but the
-sunrise is calculated tomorrow, so that the first running shift is
-from 1 hour before today's sunset to 1 hour after tomorrow's
-sunrise.
-
 ## Files
 
 `shiftwrapd`: daemon, run from `shiftwrapd.service`; must be enabled and started in
@@ -391,16 +386,23 @@ control service `read-serial@` with parameter `ttyS0`, do:
 ```
 	systemctl start shiftwrap@read-serial@ttyS0
 ```
-In this case, `shiftwrap` will do `systemctl stop read-serial@ttyS0` or `systemctl start read-serial@ttyS0`
-to start and stop the service.
+
+After you enter this command, `shiftwrap` will do `systemctl start read-serial@ttyS0` or `systemctl stop read-serial@ttyS0`
+to start and stop the service according to the shift schedule.
 
 ## Shiftwrapd API
+
 Shiftwrapd runs an HTTP server to let you query and control it.
-Requests and responses are in JSON format (and so must have the HTTP header `Content-type: application/json`)
-To allow for basic security, the `shiftwrapd` HTTP server listens on a unix domain socket, `/var/run/shiftwrapd.sock` by default.
-This means only processes with root privileges can send requests.  If you want to run `shiftwrapd` with
-fewer privileges, you should choose a different location for the socket.  To help processes find the socket,
-`shiftwrapd` creates a symlink to the socket from `/tmp/shiftwrapd.port`.
+Requests and responses are in JSON format (and so must have the HTTP
+header `Content-type: application/json`).  To implement basic security,
+the `shiftwrapd` HTTP server listens on a unix domain socket,
+`/var/run/shiftwrapd.sock`, which is only writable by root, by
+default. This means only processes with root privileges can send
+requests.  If you choose to run the `shiftwrapd` service as a
+non-privilged user, you must choose a different location for the
+socket (using the `server_address` item in `shiftwrap.yml`).  To help
+processes find the socket, `shiftwrapd` creates a symlink to the
+socket from `/tmp/shiftwrapd.port`.
 
 Here's the API:
 
@@ -428,7 +430,7 @@ if `shiftwrapd` was run with `-clockdilate` and/or `clockepoch` options
 `
 
 - **GET**: return the timer target; this is when the next shift change will happen.  The value is according
-to the `shiftwrapd` clock (see `\time` agove)
+to the `shiftwrapd` clock (see `\time` above)
 
 `
 /queue
@@ -471,8 +473,7 @@ Note:  For this and other APIs, `{sn}` can be an instantiated service name, e.g.
 
 ## Convenience tool *sw*
 
-
-sw is a shell script that simplifies calling some shiftwrap APIs from the command line.
+sw is a shell script that simplifies calling some commonly-used shiftwrap APIs from the command line.
 Here is its documentation:
 
 **Usage:**
@@ -561,25 +562,26 @@ where `ACTION ARGS...` is one of the following phrases:
 
    - shows shift-changes that would be scheduled on date YYYY-MM-DD for service named SERVICE
 
-`shiftchanges SERVICE YYYY-MM-DD RAW`
+`shiftchanges SERVICE YYYY-MM-DD raw`
 
    - shows *all* shift-changes that would be scheduled on date YYYY-MM-DD for service named SERVICE,
      before merging overlapping shifts and without removing shifts shorter than min_runtime
 
 ## **shiftwrapd** options
 
-The following options change the behaviour of `shiftwrapd`.  The
-`-clockdil` and `-clockepoch` functions allow `shiftwrapd` to use a
-[warped clock](https://github.com/SnugglyCoder/timewarper) (i.e. one
+The following options change the behaviour of `shiftwrapd`.   You will have to run
+`shiftwrapd` manually, or modify `/etc/systemd/system/shiftwrapd.service`, if you
+want to use non-default options.
+
+The `-clockdil` and `-clockepoch` functions allow `shiftwrapd` to use a
+[warped clock](https://github.com/jbrzusto/timewarper) (i.e. one
 with a different origin and speed than the system clock).  This can be
 useful for testing proposed shift schedules.  The warped clock only
 affects when and for how long `shiftwrap` starts and stops services;
 if those services read the system clock, they will still obtain the
 true time.  The current time of the warped clock is available via the
 `/time` API, and is available as environment variable `SHIFTWRAP_TIME`
-to each shift's `Setup` and `Takedown` scripts.  You will have to run
-`shiftwrapd` manually, or modify `/etc/systemd/system/shiftwrapd.service`, if you
-want to use non-default options.
+to each shift's `Setup` and `Takedown` scripts.
 
 **Options:**
 
