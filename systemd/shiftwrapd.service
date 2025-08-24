@@ -5,6 +5,7 @@ Description=shiftwrap daemon
 KillSignal=SIGINT
 # load path to credentials etc.
 Environment=SHIFTWRAP_DIR=/etc/shiftwrap
+# where to create the unprivileged link to the socket
 Environment=SHIFTWRAPD_PORT_LINK=/tmp/shiftwrapd.port
 # ideally, we would wait until we know the clock is valid, but then shiftwrapd might miss
 # API calls from udev rules, e.g. if hardware is detected which triggers starting a shiftwrap
@@ -12,6 +13,7 @@ Environment=SHIFTWRAPD_PORT_LINK=/tmp/shiftwrapd.port
 # ExecStartPre=-chronyc waitsync 0 1
 ExecStartPre=rm ${SHIFTWRAPD_PORT_LINK}
 ExecStart=/usr/bin/shiftwrapd
+ExecStartPost=/usr/bin/timeout 30 bash -c 'while [[ ! -S /var/run/shiftwrapd.sock ]]; do sleep 1; done'
 Restart=always
 RestartSec=10
 StandardOutput=journal
