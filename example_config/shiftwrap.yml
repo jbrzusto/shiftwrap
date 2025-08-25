@@ -4,7 +4,6 @@ observer:
   latitude: 45
   longitude: -65
   height: 125
-location: America/Halifax
 server_address: "/var/run/shiftwrapd.sock"
 idle_handler_command: "echo rtcwake -m mem -s $SHIFTWRAP_IDLE_DURATION"
 idle_handler_min_runtime: 5m
