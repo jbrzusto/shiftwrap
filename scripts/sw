@@ -34,12 +34,16 @@ fi
 
 # put sends JSON payload in $2 to path in $1
 function put () {
-    ${FETCH} -X PUT -H "Content-type: application/json" --data "$2" $SERVER/$1
+    if ! ${FETCH} -X PUT -H "Content-type: application/json" --data "$2" $SERVER/$1; then
+	echo unable to send data to shiftwrap API - maybe you need to do this as root? >&2
+    fi
 }
 
 # get fetches from path in $1
 function get () {
-    ${FETCH} $SERVER/$1
+    if ! ${FETCH} $SERVER/$1; then
+	echo unable to read data from shiftwrap API - maybe you need to do this as root? >&2
+    fi
 }
 
 # show global configuration
