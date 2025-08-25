@@ -11,9 +11,9 @@ Environment=SHIFTWRAPD_PORT_LINK=/tmp/shiftwrapd.port
 # API calls from udev rules, e.g. if hardware is detected which triggers starting a shiftwrap
 # service. So we don't do the following (but see https://github.com/jbrzusto/shiftwrap/issues/4 )
 # ExecStartPre=-chronyc waitsync 0 1
-ExecStartPre=rm ${SHIFTWRAPD_PORT_LINK}
+ExecStartPre=-rm ${SHIFTWRAPD_PORT_LINK}
 ExecStart=/usr/bin/shiftwrapd
-ExecStartPost=/usr/bin/timeout 30 bash -c 'while [[ ! -S /var/run/shiftwrapd.sock ]]; do sleep 1; done'
+ExecStartPost=/usr/bin/timeout 30 bash -c 'while [[ ! -S ${SHIFTWRAPD_PORT_LINK} ]]; do sleep 1; done'
 Restart=always
 RestartSec=10
 StandardOutput=journal
