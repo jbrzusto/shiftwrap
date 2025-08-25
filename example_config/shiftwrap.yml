@@ -1,9 +1,9 @@
 shell: /usr/bin/bash
 default_min_runtime: 300s
 observer:
-  latitude: 45
-  longitude: -65
-  height: 125
+  latitude: 45.092802
+  longitude: -64.358832
+  height: 5
 server_address: "/var/run/shiftwrapd.sock"
 idle_handler_command: "echo rtcwake -m mem -s $SHIFTWRAP_IDLE_DURATION"
 idle_handler_min_runtime: 5m
