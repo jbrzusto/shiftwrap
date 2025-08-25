@@ -83,7 +83,7 @@ type Config struct {
 
 	// LocationName is the name of the timezone for the Observer
 	// If empty, defaults to the system timezone.
-	LocationName string `yaml:"location" json:"location"`
+	LocationName string `yaml:"location_name" json:"locationName"`
 
 	// PrependPath is a path string which is prepended to the default path
 	// for any shell commands run by shiftwrap, e.g. Setup and Takedown scripts.
