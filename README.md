@@ -328,7 +328,7 @@ The path to the shell used when running `Setup` and `Takedown` commands at the s
 server_address: PATH_TO_SOCKET
 ```
 
-The path to the unix-domain socket on which `shiftwrapd` listens for HTTP requests.  This can also be set by the `-sock` flag for `shiftwrapd`, which overrides the value in the `shiftwrapd.yml`.  If neither of these is set, the default is `/var/run/shiftwrapd.sock`.
+The path to the unix-domain socket on which `shiftwrapd` listens for HTTP requests.  This can also be set by the `-sock` flag for `shiftwrapd`, which overrides the value in the `shiftwrapd.yml`.  If neither of these is set, the default is `/var/run/shiftwrapd.sock`.  `shiftwrapd` will create a symlink from `/tmp/shiftwrapd.port` to the socket once it is listening.
 
 ```yaml
 prepend_path: EXTRA_PATH
