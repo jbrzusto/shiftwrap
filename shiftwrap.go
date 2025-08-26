@@ -1294,8 +1294,6 @@ func ParseTidyDuration(s string) (rv TidyDuration, err error) {
 	return
 }
 
-// String formats a TidyDuration using DurationCompactString
-
 // Scheduler is run as a goroutine and is responsible for
 // starting and stopping services on their schedules, and for
 // handling requests to manage or unmanage services.
