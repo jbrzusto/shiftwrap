@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	DefaultConfDir  = "/etc/shiftwrap"
-	ConfDirEnvVar   = "SHIFTWRAP_DIR"
-	DefaultSocket   = "/tmp/shiftwrap.sock"
+	DefaultConfDir = "/etc/shiftwrap"
+	ConfDirEnvVar  = "SHIFTWRAP_DIR"
+	DefaultSocket  = "/var/run/shiftwrapd.sock"
 )
 
 var (
