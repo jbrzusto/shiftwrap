@@ -22,7 +22,6 @@ import (
 const (
 	DefaultConfDir  = "/etc/shiftwrap"
 	ConfDirEnvVar   = "SHIFTWRAP_DIR"
-	DefaultHTTPHost = "localhost:31424"
 	DefaultSocket   = "/tmp/shiftwrap.sock"
 )
 
