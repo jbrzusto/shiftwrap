@@ -494,7 +494,7 @@ where `ACTION ARGS...` is one of the following phrases:
 
      - `lat LATITUDE` : sets the latitude of the station to LATITUDE decimal degrees (positive is North)
 
-     - `long LONGITUDE` : sets the longitude of the station to LONGITUDE decimal degrees (positive is West)
+     - `long LONGITUDE` : sets the longitude of the station to LONGITUDE decimal degrees (positive is East)
 
 	 - `alt ALTITUDE` : sets the altitude of the station to ALTITUDE metres ASL
 
