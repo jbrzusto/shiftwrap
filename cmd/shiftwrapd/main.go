@@ -642,6 +642,8 @@ func doHandleShiftChanges(w http.ResponseWriter, r *http.Request, withdate bool,
 	}
 }
 
+// SendResponse writes the buffer to the ResponseWriter,
+// setting the content-type header to 'application/json'.
 func SendResponse(b []byte, w http.ResponseWriter) {
 	h := w.Header()
 	h.Set("content-type", "application/json")
