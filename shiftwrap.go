@@ -1018,6 +1018,9 @@ func (sw *ShiftWrap) ReadConfig(confDir string) {
 		if de.IsDir() {
 			continue
 		}
+		if !strings.HasSuffix(de.Name(), ".yml") {
+			continue
+		}
 		p := path.Join(confDir, de.Name())
 		var (
 			buf []byte
