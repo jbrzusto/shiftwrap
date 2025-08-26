@@ -74,6 +74,9 @@ type ShiftWrap struct {
 	// cachedSolarEvents keeps calculated solar event times for up to a year
 	// It is indexed by (day of year)-1 (0, 1, ..., 365)
 	cachedSolarEvents []SolarEvents
+	// clockSynced is set to true after waiting for ClockSyncWaitCommand,
+	// or immediately if ClockSyncWaitCommand = ""
+	clockSynced bool
 }
 
 // TidyDuration is a time.Duration which is printed in "AhBmC.Ds" format
@@ -400,6 +403,7 @@ func NewShiftWrapWithAClock(c timewarper.AClock) (rv *ShiftWrap) {
 		startTime:          time.Now(),
 		nextShiftChangeID:  1, // avoid generating zero-valued ShiftChange
 		cachedSolarEvents:  make([]SolarEvents, 366),
+		clockSynced:        false,
 	}
 	if os.Geteuid() == 0 {
 		rv.systemctlUserOpt = "--system"
@@ -466,7 +470,7 @@ var activeStatus = map[string]bool{
 
 // CheckIfRunning returns true if IsSystemd is true and the systemd
 // service named s.Name is running or in the process of starting up.
-// If IsSystemd is false, returns the isrunning flag, which indicates
+// If IsSystemd is false, returns the running flag, which indicates
 // that the Setup script has run successfully more recently than the
 // Takedown script has.
 func (s *Service) CheckIfRunning() bool {
@@ -1028,6 +1032,10 @@ func (sw *ShiftWrap) ReadConfig(confDir string) {
 				if err == nil {
 					err = sw.ExportLocation(confDir)
 				}
+				if sw.Conf.ClockSyncWaitCommand == "" {
+					// mark clock as synced since there is no command to run
+					sw.clockSynced = true
+				}
 			} else {
 				s := &Service{}
 				if err = s.Parse(buf); err == nil {
@@ -1299,8 +1307,25 @@ func ParseTidyDuration(s string) (rv TidyDuration, err error) {
 // handling requests to manage or unmanage services.
 func (sw *ShiftWrap) Scheduler() {
 	confmsg := SchedMsg{Type: SMConfirm}
+	// queue messages, waiting for clock sync
+	queuedMsgs := []SchedMsg{}
+	// channel on which to receive "clock is synced" message
+	clkSyncChan := make(chan bool)
+	if !sw.clockSynced {
+		go sw.waitForCommand(sw.Conf.ClockSyncWaitCommand, clkSyncChan)
+	}
 	for {
 		select {
+		case <-clkSyncChan:
+			sw.clockSynced = true
+			// clock is now synced; handle any queued messages
+			log.Printf("clock now sync'd; processing %d queued messages", len(queuedMsgs))
+			for _, msg := range queuedMsgs {
+				if msg.Type == SMManageService {
+					sw.doManageService(msg.Service)
+				}
+			}
+			clear(queuedMsgs)
 		case et := <-sw.scTimer.Chan():
 			// log.Printf("scTimer triggered at %s\n", et.Format(time.StampMicro))
 			sc := sw.scQueue.Head()
@@ -1323,7 +1348,12 @@ func (sw *ShiftWrap) Scheduler() {
 				sw.schedChan <- confmsg
 				return
 			case SMManageService:
-				sw.doManageService(msg.Service)
+				// if clock not yet synced, queue this message for later
+				if !sw.clockSynced {
+					queuedMsgs = append(queuedMsgs, msg)
+				} else {
+					sw.doManageService(msg.Service)
+				}
 				sw.schedChan <- confmsg
 
 			case SMUnmanageService:
@@ -1576,4 +1606,20 @@ func (sw *ShiftWrap) doRestart() {
 			sw.doManageService(s)
 		}
 	}
+}
+
+// waitForCommand waits for the shell command c to run, then
+// sends true to the done channel.  It is meant to be run as a goroutine.
+// The configured shell is used to run the command.  If the command
+// is empty, true is sent to done and the function returns immediately.
+func (sw *ShiftWrap) waitForCommand(c string, done chan<- bool) {
+	if c == "" {
+		done <- true
+		return
+	}
+	cmd := exec.Command(sw.Conf.Shell, "-c", c)
+	if _, err := cmd.Output(); err != nil {
+		log.Printf("error in waitForCommand %s: %s", c, err.Error())
+	}
+	done <- true
 }

@@ -337,6 +337,14 @@ prepend_path: EXTRA_PATH
 A path to prepend to the default system path when shiftwrapd calls `Setup` or `Takedown` shell scripts.  This can simplify these scripts by letting you omit paths on executables used by them.  The default is empty, which means no path is pre-pended.
 
 ```yaml
+clock_sync_wait_command: SHELL_SCRIPT
+```
+
+This is a shell script that is run when `shiftwrapd` starts.  Until the script finishes, `shiftwrapd` will not start or stop any services.  This is to ensure that services are not spuriously started due to the system booting into a stale clock value.  While waiting for the script to finish, `shiftwrapd` will accept and queue requests to manage services.  This means that a service management request triggered by detection of a pluggable device will take effect once clock sync has occurred, even if the device was detected before then.
+
+The default is `systemctl restart systemd-time-wait-sync.service`, which should work for most situations.
+
+```yaml
 idle_handler_command: SHELL_SCRIPT
 idle_handler_min_runtime: DURATION
 idle_handler_initial_delay: DURATION

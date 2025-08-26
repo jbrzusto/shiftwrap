@@ -88,6 +88,10 @@ type Config struct {
 	// PrependPath is a path string which is prepended to the default path
 	// for any shell commands run by shiftwrap, e.g. Setup and Takedown scripts.
 	PrependPath string `yaml:"prepend_path" json:"prependPath"`
+
+	// ClockSyncWaitCommand is a shell command run to wait for system clock to sync
+	// to network time.  If it is "", no waiting is done.
+	ClockSyncWaitCommand string `yaml:"clock_sync_wait_command" json:"clockSyncWaitCommand"`
 }
 
 var DefaultConfig = Config{
@@ -97,6 +101,7 @@ var DefaultConfig = Config{
 	Shell:                   "/bin/bash",
 	DefaultMinRuntime:       TidyDuration(1 * time.Minute),
 	ServerAddress:           "/var/run/shiftwrapd.sock",
+	ClockSyncWaitCommand:    "systemctl restart systemd-time-wait-sync.service",
 }
 
 func (c *Config) Parse(buf []byte) (err error) {
