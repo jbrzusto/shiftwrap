@@ -586,6 +586,22 @@ where `ACTION ARGS...` is one of the following phrases:
    - shows *all* shift-changes that would be scheduled on date YYYY-MM-DD for service named SERVICE,
      before merging overlapping shifts and without removing shifts shorter than min_runtime
 
+`sw shifts SERVICE`
+
+   - lists names of shifts for service SERVICE
+
+`sw shift SERVICE SHIFTNAME`
+
+   - shows shift SHIFTNAME of service SERVICE
+
+`sw shift SERVICE SHIFTNAME START STOP SETUP TAKEDOWN`
+
+   - adds or replaces shift SHIFTNAME of service SERVICE with given START and STOP times, and SETUP and TAKEDOWN scripts
+
+`sw delshift SERVICE SHIFTNAME`
+
+   - deletes the shift named SHIFTNAME from service SERVICE
+
 ## **shiftwrapd** options
 
 The following options change the behaviour of `shiftwrapd`.   You will have to run
