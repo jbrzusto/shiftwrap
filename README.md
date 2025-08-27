@@ -208,7 +208,18 @@ format (e.g. HH:MM:SS.SSS), or as times relative to solar events
 
   - an optional offset relative to a solar event can be given by an expression
     with the same syntax as `MinRuntime` (see above)
-- `persistinstances` is optional, and defaults to false.  It is only used for a template Service (i.e. one whose name ends in `@`, e.g. `eatserial@`).  Normally, a template service is instantiated in response to a dynamic detection of a piece of hardware, and so it doesn't make sense to create a persistent shiftwrap configuration file, because then on a subsequent system boot, shiftwrap would try to start the templated service even if the device had been unplugged and so not detected.  This option is provided in case you have a use-case where this default behaviour isn't what you want:  if set to `true`, shiftwrapd will create a config file for instantiated template services, e.g. `/etc/shiftwrap/services/eatserial@ttyS0.yml`
+
+- `persistinstances` is optional, and defaults to false.  It is only
+used for a template Service (i.e. one whose name ends in `@`,
+e.g. `eatserial@`).  Normally, a template service is instantiated in
+response to a dynamic detection of a piece of hardware, and so it
+doesn't make sense to create a persistent shiftwrap configuration
+file, because then on a subsequent system boot, shiftwrap might try to
+start managing the templated service even if the device had been
+unplugged and so not detected.  This option is provided in case you
+have a use-case where this default behaviour isn't what you want: if
+set to `true`, shiftwrapd will create a config file for instantiated
+template services, e.g. `/etc/shiftwrap/services/eatserial@ttyS0.yml`
 
 ## Example
 Running this shell command:
