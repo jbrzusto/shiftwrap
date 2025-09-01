@@ -602,34 +602,50 @@ func (sw *ShiftWrap) Stop(s *Service, sh *Shift, t time.Time) bool {
 	return true
 }
 
-// ServiceByName retrieves a service by its name.  If all of these are true:
-// - the name includes a '@' (i.e. it is an instantiated service)
-// - the service does not exit
-// - a service template exists (with the name up to and including the '@'),
-// then a new Service is created by copying the service template.
-// Also, if create is true, then if the service does not already exist and is
-// not an instantiated service, it is created.
-// If no Service can be found or instantiated for name sn, and create is false,
-// the function returns nil.
-func (sw *ShiftWrap) ServiceByName(sn string, create bool) (rv *Service) {
-	if rv = sw.services[sn]; rv != nil {
+// ServiceByName retrieves a service named sn, possibly after
+// creating it.  There are several cases
+//
+// - service sn exists:
+//
+//	return the service
+//
+// - service sn doesn't exist and mustExist is true:
+//
+//	return nil
+//
+// - service sn doesn't exist, mustExist is false, and sn includes a
+// '@' (i.e. it is an instantiated service) and a corresponding
+// service template exists (i.e. there is a service whose name is the
+// substring of sn up to and including the '@') and the substring of
+// sn after the '@' is not empty:
+//
+//	create and return the instantiated service
+//
+// - service sn doesn't exist, mustExist is false, and sn doesn't include a '@':
+//
+//	create service sn, with only the Name field populated
+//
+// - otherwise:
+//
+//	return nil
+func (sw *ShiftWrap) ServiceByName(sn string, mustExist bool) (rv *Service) {
+	if rv = sw.services[sn]; rv != nil || mustExist {
 		return
 	}
 	tpn, instance, haveAt := strings.Cut(sn, "@")
-	if haveAt && instance != "" {
-		tp := sw.services[tpn+"@"]
-		if tp != nil {
-			// found a template, so instantiate it
-			rv = tp.Instantiate(sn)
-			sw.AddService(rv)
+	if haveAt {
+		if instance != "" {
+			tp := sw.services[tpn+"@"]
+			if tp != nil {
+				// found a template, so instantiate it
+				rv = tp.Instantiate(sn)
+				sw.AddService(rv)
+			}
 		}
 		return
 	}
-	if create {
-		rv = &Service{
-			Name: sn,
-		}
-		sw.AddService(rv)
+	rv = &Service{
+		Name: sn,
 	}
 	return
 }

@@ -423,7 +423,7 @@ func HandleServices(w http.ResponseWriter, r *http.Request) {
 // If it can't do this, it returns nil and if mustExist is true, writes an appropriate
 // error to w.
 func lookupService(w http.ResponseWriter, sn string, mustExist bool) (rv *shiftwrap.Service) {
-	if rv = SW.ServiceByName(sn, false); rv == nil && mustExist {
+	if rv = SW.ServiceByName(sn, mustExist); rv == nil {
 		before, _, found := strings.Cut(sn, "@")
 		if found {
 			HTErrStatus(http.StatusNotFound, w, "service template %s@ not known", before)
