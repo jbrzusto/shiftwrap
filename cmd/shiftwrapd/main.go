@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/jbrzusto/shiftwrap/v2"
@@ -418,18 +417,12 @@ func HandleServices(w http.ResponseWriter, r *http.Request) {
 	SendResponse(b, w)
 }
 
-// lookupService looks up a service by name, instantiating it
-// if it is a previously-unknown instance of a template.
-// If it can't do this, it returns nil and if mustExist is true, writes an appropriate
-// error to w.
+// lookupService looks sn using Shiftwrap.ServiceByName, writing any error
+// to w.  In case of an error, returns nil.
 func lookupService(w http.ResponseWriter, sn string, mustExist bool) (rv *shiftwrap.Service) {
-	if rv = SW.ServiceByName(sn, mustExist); rv == nil {
-		before, _, found := strings.Cut(sn, "@")
-		if found {
-			HTErrStatus(http.StatusNotFound, w, "service template %s@ not known", before)
-		} else {
-			HTErrStatus(http.StatusNotFound, w, "service %s not known", sn)
-		}
+	var err error
+	if rv, err = SW.ServiceByName(sn, mustExist); err != nil {
+		HTErrStatus(http.StatusNotFound, w, err.Error())
 	}
 	return
 }
@@ -461,9 +454,8 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 		serviceExisted := true
 		// create service in case it doesn't already exist
 		if s == nil {
-			s = SW.ServiceByName(sn, true)
+			s = lookupService(w, sn, false)
 			if s == nil {
-				HTErr(w, "unknown service: %s", sn)
 				return
 			}
 			serviceExisted = false

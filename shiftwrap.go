@@ -611,7 +611,7 @@ func (sw *ShiftWrap) Stop(s *Service, sh *Shift, t time.Time) bool {
 //
 // - service sn doesn't exist and mustExist is true:
 //
-//	return nil
+//	return nil and an error
 //
 // - service sn doesn't exist, mustExist is false, and sn includes a
 // '@' (i.e. it is an instantiated service) and a corresponding
@@ -627,9 +627,12 @@ func (sw *ShiftWrap) Stop(s *Service, sh *Shift, t time.Time) bool {
 //
 // - otherwise:
 //
-//	return nil
-func (sw *ShiftWrap) ServiceByName(sn string, mustExist bool) (rv *Service) {
+//	return nil and an error
+func (sw *ShiftWrap) ServiceByName(sn string, mustExist bool) (rv *Service, err error) {
 	if rv = sw.services[sn]; rv != nil || mustExist {
+		if rv == nil {
+			err = fmt.Errorf("service %s unknown", sn)
+		}
 		return
 	}
 	tpn, instance, haveAt := strings.Cut(sn, "@")
@@ -640,7 +643,11 @@ func (sw *ShiftWrap) ServiceByName(sn string, mustExist bool) (rv *Service) {
 				// found a template, so instantiate it
 				rv = tp.Instantiate(sn)
 				sw.AddService(rv)
+			} else {
+				err = fmt.Errorf("template service %s@ unknown", tpn)
 			}
+		} else {
+			err = fmt.Errorf("can't instantiate template service %s@ with an empty instance name", tpn)
 		}
 		return
 	}
