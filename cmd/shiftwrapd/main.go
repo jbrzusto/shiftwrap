@@ -115,8 +115,10 @@ func HTErr(w http.ResponseWriter, msg string, v ...any) {
 }
 
 func HTErrStatus(status int, w http.ResponseWriter, msg string, v ...any) {
+	h := w.Header()
+	h.Set("content-type", "application/json")
 	w.WriteHeader(status)
-	w.Write([]byte(fmt.Sprintf(msg, v...)))
+	w.Write([]byte("{\"error\":" + fmt.Sprintf(msg, v...) + "\"|"))
 	w.Write([]byte("\r\n"))
 }
 
