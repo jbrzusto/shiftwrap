@@ -1,0 +1,16 @@
+issystemd: false
+minruntime: ""
+persistinstances: false
+shifts:
+    morning:
+        start: dawn-2h
+        stop: dawn+1h
+        stopbeforestart: false
+        setup: date --date @$SHIFTWRAP_TIME && echo setpar recording.duration 300 recording.spacing 300
+        takedown: date --date @$SHIFTWRAP_TIME
+    overnight:
+        start: dusk-1h
+        stop: dawn-2h
+        stopbeforestart: true
+        setup: date --date @$SHIFTWRAP_TIME && echo setpar recording.duration 300 recording.spacing 600
+        takedown: ""

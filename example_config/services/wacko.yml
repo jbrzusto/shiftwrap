@@ -1,0 +1,10 @@
+issystemd: false
+minruntime: ""
+persistinstances: false
+shifts:
+    overnight:
+        start: dusk+3h30m
+        stop: dawn-3h30m
+        stopbeforestart: true
+        setup: echo `date --date @$SHIFTWRAP_TIME` Wacko start
+        takedown: echo `date --date @$SHIFTWRAP_TIME` Wacko stop

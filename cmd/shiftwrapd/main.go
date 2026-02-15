@@ -47,6 +47,21 @@ FLAGS:
 	os.Exit(0)
 }
 
+func doOrDie(err error, msg string, pars ...any) {
+	if err == nil {
+		return
+	}
+	allpars := append(pars, err.Error())
+	log.Fatalf(msg, allpars)
+}
+
+func mustRemove(name string) {
+	err := os.Remove(name)
+	if err != nil {
+		log.Fatalf("unable to remove %s: %s", name, err.Error())
+	}
+}
+
 func main() {
 	var sockName string
 	flag.StringVar(&sockName, "sock", "", "path to unix domain socket from which to operate HTTP server; empty means use value from shiftwrap.yml; if that too is empty, default is "+DefaultSocket)
@@ -79,7 +94,7 @@ func main() {
 			sockName = DefaultSocket
 		}
 	}
-	os.Remove(sockName)
+	mustRemove(sockName)
 	SW.ReadConfig(serviceConfDir)
 	http.HandleFunc("/config", HandleConfig)
 	http.HandleFunc("/time", HandleTime)
@@ -95,7 +110,7 @@ func main() {
 		// create the symlink giving the http port
 		portLink := os.Getenv("SHIFTWRAPD_PORT_LINK")
 		if portLink != "" {
-			os.Remove(portLink)
+			mustRemove(portLink)
 			time.Sleep(250 * time.Millisecond)
 			if err := os.Symlink(sockName, portLink); err != nil {
 				log.Printf("error creating port link: %s", err.Error())

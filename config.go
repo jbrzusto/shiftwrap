@@ -117,7 +117,7 @@ func (c *Config) Parse(buf []byte) (err error) {
 		c.Observer.Location = time.Local
 	}
 	if c.PrependPath != "" {
-		os.Setenv("PATH", c.PrependPath+":"+os.Getenv("PATH"))
+		_ = os.Setenv("PATH", c.PrependPath+":"+os.Getenv("PATH"))
 	}
 	return
 }

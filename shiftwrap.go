@@ -379,7 +379,7 @@ func (s *ShiftChange) Service() *Service {
 // Equals returns true if sc and sc2 represent the same effective shift change,
 // i.e. ignoring allocation order (.id) or time of ocurrence (.trueAt)
 func (sc ShiftChange) Equals(sc2 ShiftChange) bool {
-	return sc.shift == sc2.shift && sc.At == sc2.At && sc.IsStart == sc2.IsStart
+	return sc.shift == sc2.shift && sc.At.Equal(sc2.At) && sc.IsStart == sc2.IsStart
 }
 
 var DefaultShiftWrap *ShiftWrap
@@ -642,19 +642,22 @@ func (sw *ShiftWrap) ServiceByName(sn string, mustExist bool) (rv *Service, err 
 			if tp != nil {
 				// found a template, so instantiate it
 				rv = tp.Instantiate(sn)
-				sw.AddService(rv)
+				err = sw.AddService(rv)
+				if err != nil {
+					return rv, err
+				}
 			} else {
 				err = fmt.Errorf("template service %s@ unknown", tpn)
 			}
 		} else {
 			err = fmt.Errorf("can't instantiate template service %s@ with an empty instance name", tpn)
 		}
-		return
+		return rv, err
 	}
 	rv = &Service{
 		Name: sn,
 	}
-	return
+	return rv, err
 }
 
 // GetServiceNames returns a list of configured Services.
@@ -763,13 +766,16 @@ func (sw *ShiftWrap) DropService(sn string) (err error) {
 	)
 	if s, have = sw.services[sn]; !have {
 		err = fmt.Errorf("service %s not defined", sn)
-		return
+		return err
 	}
 	if s.IsManaged {
-		sw.ManageService(s, false)
+		err = sw.ManageService(s, false)
+		if err != nil {
+			return err
+		}
 	}
 	delete(sw.services, sn)
-	return
+	return nil
 }
 
 // CalculateShiftChanges recalculates ShiftChanges for a Service,
@@ -812,16 +818,16 @@ func NextShiftChange(t time.Time, scs ShiftChanges, excludeStopAtT bool) (rv int
 //     ends
 //
 // If the service is started, any Setup command is first run through the shell.
-func (sw *ShiftWrap) AddShifts(s *Service, shs ...*Shift) {
+func (sw *ShiftWrap) AddShifts(s *Service, shs ...*Shift) error {
 	if len(shs) == 0 {
-		return
+		return nil
 	}
 	// add shifts
 	for _, sh := range shs {
 		sh.service = s
 		s.Shifts[sh.Label] = sh
 	}
-	sw.ServiceChanged(s)
+	return sw.ServiceChanged(s)
 }
 
 // DropShifts removes each shift named in shns from service s.
@@ -830,25 +836,30 @@ func (sw *ShiftWrap) AddShifts(s *Service, shs ...*Shift) {
 // - the service is running and
 // - the dropped shifts are the only shifts for this service which include the current time
 // If the service is stopped, any Takedown script is then run through the shell
-func (sw *ShiftWrap) DropShifts(s *Service, shns ...string) {
+func (sw *ShiftWrap) DropShifts(s *Service, shns ...string) error {
 	if len(shns) == 0 {
-		return
+		return nil
 	}
 	for _, shn := range shns {
 		delete(s.Shifts, shn)
 	}
-	sw.ServiceChanged(s)
+	return sw.ServiceChanged(s)
 }
 
 // ServiceChanged handles changes to a service.  If the
 // service is not currently managed, nothing happens.
 // If the service *is* currently managed, shift changes are recalculated,
 // which might stop or start the service.
-func (sw *ShiftWrap) ServiceChanged(s *Service) {
+func (sw *ShiftWrap) ServiceChanged(s *Service) error {
+	var err error
 	if s.IsManaged {
-		sw.ManageService(s, false)
-		sw.ManageService(s, true)
+		err = sw.ManageService(s, false)
+		if err != nil {
+			return err
+		}
+		err = sw.ManageService(s, true)
 	}
+	return err
 }
 
 // DayStartEnd returns the start and end of the (local) day in which t occurs.
@@ -1022,7 +1033,6 @@ func (s *Shift) GuessStopBeforeStart() {
 		return
 	}
 	s.StopBeforeStart = stop.Before(start)
-	return
 }
 
 // ReadConfig reads .yml files from the confDir.  The file named
@@ -1066,7 +1076,10 @@ func (sw *ShiftWrap) ReadConfig(confDir string) {
 				s := &Service{}
 				if err = s.Parse(buf); err == nil {
 					s.Name = strings.TrimSuffix(de.Name(), ".yml")
-					sw.AddService(s)
+					err = sw.AddService(s)
+					if err != nil {
+						log.Printf("unable to add service %s: %s", s.Name, err.Error())
+					}
 				}
 			}
 		}
@@ -1138,10 +1151,7 @@ func IsInstance(n string) bool {
 // IsTemplate returns true if n is the name of a Service template
 func IsTemplate(n string) bool {
 	i := strings.IndexRune(n, '@')
-	if i == len(n)-1 {
-		return true
-	}
-	return false
+	return i == len(n)-1
 }
 
 // solarEventNames holds the lower-case names of all solar events in a
@@ -1601,16 +1611,19 @@ func (sw *ShiftWrap) doManageService(s *Service) {
 			// so look at yesterday's shiftChanges
 			scs := sw.ServiceShiftChanges(s, Noon(now).AddDate(0, 0, -1), false)
 			// find the last Start shiftChange yesterday
-			for i := len(scs) - 1; i >= 0; i-- {
+			var i int
+			for i = len(scs) - 1; i >= 0; i-- {
 				if scs[i].IsStart {
 					sh = scs[i].shift
 					break
 				}
 			}
-			sw.Stop(s, sh, now)
+			if i < 0 {
+				return
+			}
 		}
+		sw.Stop(s, sh, now)
 	}
-
 }
 
 // doUnmanageService removes a service from management by shiftwrap.
