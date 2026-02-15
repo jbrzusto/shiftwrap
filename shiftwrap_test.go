@@ -322,7 +322,10 @@ func TestServiceShiftChanges_wonky(t *testing.T) {
 	SW = NewShiftWrap()
 	SW.Conf.Observer = Obs
 	TestService3.Shifts = TestShifts4
-	SW.AddService(TestService3)
+	err := SW.AddService(TestService3)
+	if err != nil {
+		t.Errorf(`TestServiceShiftChanges_wonky: error adding service: %s`, err.Error())
+	}
 	// On date T1, the Stop time is before the Start time, but this is not meant to
 	// be an overnight shift, so midnight is excluded, and the running period is eliminated.
 	sc := SW.ServiceShiftChanges(TestService3, T1, false)
@@ -331,9 +334,15 @@ func TestServiceShiftChanges_wonky(t *testing.T) {
 		t.Errorf(`TestServiceShiftChanges_wonky returned %d shift changes but want %d`, len(sc), len(want))
 	}
 	// On date T1 + 1, Start is shortly before Stop, so there is a running period
-	SW.DropService("whammo")
+	err = SW.DropService("whammo")
+	if err != nil {
+		t.Errorf(`TestServiceShiftChanges_wonky: error dropping service: %s`, err.Error())
+	}
 	TestService3.Shifts = TestShifts4
-	SW.AddService(TestService3)
+	err = SW.AddService(TestService3)
+	if err != nil {
+		t.Errorf(`TestServiceShiftChanges_wonky: error adding service: %s`, err.Error())
+	}
 	sc = SW.ServiceShiftChanges(TestService3, T1.AddDate(0, 0, 1), false)
 	want = []ShiftChange{
 		ShiftChange{
@@ -573,10 +582,19 @@ func TestNewShiftWrapWithAClock(t *testing.T) {
 	done := validateShiftChangesUntil(t, sw2, sw2.NewShiftChangeListener(), T2.Add(40*time.Hour))
 	sw2.Conf.Observer = Obs
 	TestService.Shifts = TestShifts
-	sw2.AddService(TestService)
-	sw2.ManageService(TestService, true)
+	err := sw2.AddService(TestService)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock: error adding service: %s`, err.Error())
+	}
+	err = sw2.ManageService(TestService, true)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock: error managing service: %s`, err.Error())
+	}
 	<-done
-	sw2.ManageService(TestService, false)
+	err = sw2.ManageService(TestService, false)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock: error managing service: %s`, err.Error())
+	}
 	sw2.Quit()
 }
 
@@ -591,10 +609,22 @@ func ExampleNewShiftWrapWithAClock_hurry() {
 	sw2.Conf.Observer = Obs
 	TestService.Shifts = TestShifts
 	TestService.running = false
-	sw2.AddService(TestService)
-	sw2.ManageService(TestService, true)
+	err := sw2.AddService(TestService)
+	if err != nil {
+		fmt.Printf(`ExampleNewShiftWrapWithAClock_hurry: error adding service: %s\n`, err.Error())
+		return
+	}
+	err = sw2.ManageService(TestService, true)
+	if err != nil {
+		fmt.Printf(`ExampleNewShiftWrapWithAClock_hurry: error managing service: %s\n`, err.Error())
+		return
+	}
 	<-weekDone
-	sw2.ManageService(TestService, false)
+	err = sw2.ManageService(TestService, false)
+	if err != nil {
+		fmt.Printf(`ExampleNewShiftWrapWithAClock_hurry: error managing service: %s\n`, err.Error())
+		return
+	}
 	sw2.Quit()
 	// Output:
 	// 2025-04-24 06:06:02 (bogus): Stop  shift overnight at sunrise-15m
@@ -678,13 +708,31 @@ func TestNewShiftWrapWithAClock_two(t *testing.T) {
 	TestService2.Shifts = TestShifts2
 	TestService.running = false
 	TestService2.running = false
-	sw2.AddService(TestService2)
-	sw2.AddService(TestService)
-	sw2.ManageService(TestService2, true)
-	sw2.ManageService(TestService, true)
+	err := sw2.AddService(TestService2)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock_two: error adding service: %s`, err.Error())
+	}
+	err = sw2.AddService(TestService)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock_two: error adding service: %s`, err.Error())
+	}
+	err = sw2.ManageService(TestService2, true)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock_two: error managing service: %s`, err.Error())
+	}
+	err = sw2.ManageService(TestService, true)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock_two: error managing service: %s`, err.Error())
+	}
 	<-weekDone
-	sw2.ManageService(TestService2, false)
-	sw2.ManageService(TestService, false)
+	err = sw2.ManageService(TestService2, false)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock_two: error managing service: %s`, err.Error())
+	}
+	err = sw2.ManageService(TestService, false)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock_two: error managing service: %s`, err.Error())
+	}
 	sw2.Quit()
 }
 
@@ -701,12 +749,30 @@ func TestNewShiftWrapWithAClock_two_hurry(t *testing.T) {
 	TestService2.Shifts = TestShifts2
 	TestService.running = false
 	TestService2.running = false
-	sw2.AddService(TestService2)
-	sw2.AddService(TestService)
-	sw2.ManageService(TestService2, true)
-	sw2.ManageService(TestService, true)
+	err := sw2.AddService(TestService2)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock_two_hurry: error adding service: %s`, err.Error())
+	}
+	err = sw2.AddService(TestService)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock_two_hurry: error adding service: %s`, err.Error())
+	}
+	err = sw2.ManageService(TestService2, true)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock_two_hurry: error managing service: %s`, err.Error())
+	}
+	err = sw2.ManageService(TestService, true)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock_two_hurry: error managing service: %s`, err.Error())
+	}
 	<-weekDone
-	sw2.ManageService(TestService2, false)
-	sw2.ManageService(TestService, false)
+	err = sw2.ManageService(TestService2, false)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock_two_hurry: error managing service: %s`, err.Error())
+	}
+	err = sw2.ManageService(TestService, false)
+	if err != nil {
+		t.Errorf(`TestNewShiftWrapWithAClock_two_hurry: error managing service: %s`, err.Error())
+	}
 	sw2.Quit()
 }

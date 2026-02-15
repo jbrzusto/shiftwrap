@@ -52,14 +52,11 @@ func doOrDie(err error, msg string, pars ...any) {
 		return
 	}
 	allpars := append(pars, err.Error())
-	log.Fatalf(msg, allpars)
+	log.Fatalf(msg, allpars...)
 }
 
 func mustRemove(name string) {
-	err := os.Remove(name)
-	if err != nil {
-		log.Fatalf("unable to remove %s: %s", name, err.Error())
-	}
+	doOrDie(os.Remove(name), "unable to remove %s", name)
 }
 
 func main() {
@@ -122,19 +119,28 @@ func main() {
 		log.Fatalf("unable to listen on unix socket %s: %s", sockName, err.Error())
 	}
 	srv := http.Server{}
-	srv.Serve(listener)
+	err = srv.Serve(listener)
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatalf("HTTP server error: %s", err.Error())
+	}
 }
 
 func HTErr(w http.ResponseWriter, msg string, v ...any) {
 	HTErrStatus(http.StatusBadRequest, w, msg, v...)
 }
 
+func mustWrite(w http.ResponseWriter, b []byte) {
+	if _, err := w.Write(b); err != nil {
+		log.Printf("error writing HTTP response: %s", err.Error())
+	}
+}
+
 func HTErrStatus(status int, w http.ResponseWriter, msg string, v ...any) {
 	h := w.Header()
 	h.Set("content-type", "application/json")
 	w.WriteHeader(status)
-	w.Write([]byte("{\"error\":" + fmt.Sprintf(msg, v...) + "\"|"))
-	w.Write([]byte("\r\n"))
+	mustWrite(w, []byte("{\"error\":"+fmt.Sprintf(msg, v...)+"\"|"))
+	mustWrite(w, []byte("\r\n"))
 }
 
 func HTNotImpl(w http.ResponseWriter, fun string) {
@@ -144,7 +150,7 @@ func HTNotImpl(w http.ResponseWriter, fun string) {
 var OKResp = []byte("{\"status\":\"ok\"}")
 
 func HTOkay(w http.ResponseWriter) {
-	w.Write(OKResp)
+	mustWrite(w, OKResp)
 }
 
 func HandleTime(w http.ResponseWriter, r *http.Request) {
@@ -408,7 +414,7 @@ func HandleConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		err := SW.WriteGlobalConfig(confDir)
 		if err != nil {
-			HTErr(w, "error rewriting shiftwrap.yml configuration: "+err.Error())
+			HTErr(w, "error rewriting shiftwrap.yml configuration: %s", err.Error())
 			return
 		}
 		HTOkay(w)
@@ -439,7 +445,7 @@ func HandleServices(w http.ResponseWriter, r *http.Request) {
 func lookupService(w http.ResponseWriter, sn string, mustExist bool) (rv *shiftwrap.Service) {
 	var err error
 	if rv, err = SW.ServiceByName(sn, mustExist); err != nil {
-		HTErrStatus(http.StatusNotFound, w, err.Error())
+		HTErrStatus(http.StatusNotFound, w, "error looking up service: %s", err.Error())
 	}
 	return
 }
@@ -459,7 +465,11 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 		if s == nil {
 			return
 		}
-		SW.DropService(sn)
+		err := SW.DropService(sn)
+		if err != nil {
+			HTErr(w, "error dropping service: %s", err.Error())
+			return
+		}
 		HTOkay(w)
 	case http.MethodPut:
 		tmps := getPayload(w, r)
@@ -566,7 +576,10 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 								}
 							}
 							if errmsg == "" {
-								SW.AddShifts(s, tmpsh)
+								err := SW.AddShifts(s, tmpsh)
+								if err != nil {
+									errmsg += "error adding shift " + n + ": " + err.Error() + "; "
+								}
 							}
 						}
 					}
@@ -589,7 +602,11 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 		if serviceExisted && s.IsManaged {
 			// service was being managed, so clear shift-changes for the service
 			// because new parameters may have invalidated them.
-			SW.ManageService(s, false)
+			err := SW.ManageService(s, false)
+			if err != nil {
+				HTErr(w, "error managing service: %s", err.Error())
+				return
+			}
 			if !setManaged {
 				// setManaged was not explicitly specified, so management should
 				// continue.  This happens in the `if` below.
@@ -598,7 +615,11 @@ func HandleService(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if setManaged {
-			SW.ManageService(s, willManage)
+			err := SW.ManageService(s, willManage)
+			if err != nil {
+				HTErr(w, "error managing service: %s", err.Error())
+				return
+			}
 		}
 		if err := SW.WriteConfig(s, serviceConfDir); err != nil {
 			log.Printf("error (re-)writing config for service %s: %s", s.Name, err.Error())
@@ -641,9 +662,17 @@ func doHandleShiftChanges(w http.ResponseWriter, r *http.Request, withdate bool,
 			date = date.Add(12 * time.Hour)
 			var b []byte
 			b, err = json.Marshal(SW.ServiceShiftChanges(s, date, raw))
+			if err != nil {
+				HTErr(w, "error marshalling shift changes: %s", err.Error())
+				return
+			}
 			SendResponse(b, w)
 		} else {
-			b, _ := json.Marshal(s.GetCurrentShiftChanges())
+			b, err := json.Marshal(s.GetCurrentShiftChanges())
+			if err != nil {
+				HTErr(w, "error marshalling shift changes: %s", err.Error())
+				return
+			}
 			SendResponse(b, w)
 		}
 	default:
@@ -656,5 +685,5 @@ func doHandleShiftChanges(w http.ResponseWriter, r *http.Request, withdate bool,
 func SendResponse(b []byte, w http.ResponseWriter) {
 	h := w.Header()
 	h.Set("content-type", "application/json")
-	w.Write(b)
+	mustWrite(w, b)
 }
