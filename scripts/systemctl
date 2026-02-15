@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# systemctl - a stub to simulate systemctl
+# This is used when testing shiftwrap on platforms without systemd.
+# It persistently marks "services" as "started" or "stopped" based on previous calls to this script.
+
+printf "Called systemctl with $*\n" >> /tmp/systemctl_show.log
+
+DB=./systemd_stub_db.sqlite
+
+if [[ ! -f $DB ]]; then
+    sqlite3 $DB "CREATE TABLE services (name TEXT PRIMARY KEY, running BOOL)"
+fi
+
+SCUSER="system"
+if [[ "$1" == "--system" || "$2" == "--user" ]]; then
+    SCUSER=${1:2}
+    shift
+fi
+if [[ "$1" == "start" ]]; then
+    if [[ "$2" == "bogus" ]]; then
+        exit 1
+    fi
+    printf "Starting %s service %s for user %s\n" "$SCUSER" "$2" "$SCUSER"
+    sqlite3 $DB "INSERT OR REPLACE INTO services (name, running) VALUES ('$2', 1)"
+elif [[ "$1" == "restart" ]]; then
+    printf "Restarting %s service %s for user %s\n" "$SCUSER" "$2" "$SCUSER"
+    sqlite3 $DB "INSERT OR REPLACE INTO services (name, running) VALUES ('$2', 1)"
+elif [[ "$1" == "stop" ]]; then
+    printf "Stopping %s service %s for user %s\n" "$SCUSER" "$2" "$SCUSER"
+    sqlite3 $DB "INSERT OR REPLACE INTO services (name, running) VALUES ('$2', 0)"
+elif [[ "$1" == "show" ]]; then
+    # Note: form of this command is "systemctl show -p SubState --value SERVICENAME",
+    # so the service name is in $5, not $2. 
+    if [["$5" == "app.slice"]]; then
+        echo active
+        exit 0
+    fi
+    if [[ `sqlite3 $DB "SELECT running FROM services WHERE name='$5'"` == "1" ]]; then
+        echo active
+    else
+        echo inactive
+    fi
+else
+    cat <<EOF
+This is a stub for systemctl, used for testing shiftwrap on platforms without systemd.
+It uses the sqlite database $DB to persistently track whether "services" are "started" 
+or "stopped" based on previous calls to this script.
+Usage:
+    systemctl start|stop|restart servicename
+    systemctl show -p SubState --value servicename
+EOF
+fi
