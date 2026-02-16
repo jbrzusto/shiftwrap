@@ -101,7 +101,7 @@ var DefaultConfig = Config{
 	Shell:                   "/bin/bash",
 	DefaultMinRuntime:       TidyDuration(1 * time.Minute),
 	ServerAddress:           "/var/run/shiftwrapd.sock",
-	ClockSyncWaitCommand:    "systemctl restart systemd-time-wait-sync.service",
+	ClockSyncWaitCommand:    "/usr/lib/systemd/systemd-time-wait-sync",
 }
 
 func (c *Config) Parse(buf []byte) (err error) {
