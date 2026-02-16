@@ -1497,7 +1497,9 @@ func (sw *ShiftWrap) doShiftChange(now time.Time) {
 	// year), stop managing this service.
 	sc, ok := sw.scQueue.PopFirst()
 	if !ok {
-		log.Printf("weird - no shift changes left and numManagedServices = %d\n", sw.NumManagedServices)
+		if sw.NumManagedServices > 0 {
+			log.Printf("weird - no shift changes left and numManagedServices = %d\n", sw.NumManagedServices)
+		}
 		return
 	}
 	s := sc.Service()
