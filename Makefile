@@ -5,7 +5,7 @@ build:
 
 test: .ALWAYS
 	bash -c "\
-	if ! which systemctl; then \
+	if ! which systemctl >/dev/null 2>&1; then \
 		export PATH=/Users/john/proj/shiftwrap/scripts:${PATH}; \
 	fi; \
 	go test -v ./..."
