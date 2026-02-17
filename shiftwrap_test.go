@@ -600,8 +600,8 @@ func TestNewShiftWrapWithAClock(t *testing.T) {
 
 func ExampleNewShiftWrapWithAClock_hurry() {
 	T2 := time.Date(2025, time.April, 23, 20, 26, 8, 299362560, time.Local)
-	clock := timewarper.GetWarpedClock(3600, T2)
-	clock.(*timewarper.Clock).SetUnsafe(true)
+	clock := timewarper.GetWarpedClock(1, T2)
+	//clock.(*timewarper.Clock).SetUnsafe(true)
 	sw2 := NewShiftWrapWithAClock(clock)
 	sw2.Hurry = true
 	// run for a week
